@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { CheckIcon, MinusIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { requireProfile } from "@/lib/auth/guards";
-import { ROLE_LABELS } from "@/lib/auth/roles";
+import { requireProfile, type CurrentUser } from "@/lib/auth/guards";
+import { ROLE_LABELS, STATUS_LABELS, type AppRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -16,8 +18,112 @@ export const metadata: Metadata = {
 };
 
 const NOTICES: Record<string, string> = {
-  forbidden: "You do not have access to that page.",
+  forbidden: "User management is restricted to administrators.",
 };
+
+const dateFormat = new Intl.DateTimeFormat("en", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+/** What each role may do, stated in the same terms the guards enforce. */
+const PERMISSIONS: Record<AppRole, { allowed: string[]; denied: string[] }> = {
+  admin: {
+    allowed: [
+      "View the overview",
+      "Create, edit, and remove accounts",
+      "Change roles, suspend and restore access",
+    ],
+    denied: [],
+  },
+  viewer: {
+    allowed: ["View the overview", "View your own account details"],
+    denied: [
+      "Create, edit, or remove accounts",
+      "Change roles, suspend or restore access",
+    ],
+  },
+};
+
+function AccountCard({ user }: { user: CurrentUser }) {
+  const fields = [
+    { label: "Name", value: user.fullName || "—" },
+    { label: "Email", value: user.email },
+    {
+      label: "Member since",
+      value: user.createdAt ? dateFormat.format(new Date(user.createdAt)) : "—",
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Your account</CardTitle>
+        <CardDescription>
+          Only an administrator can change these details.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-3">
+          {fields.map((field) => (
+            <div
+              key={field.label}
+              className="flex items-baseline justify-between gap-4"
+            >
+              <dt className="text-muted-foreground">{field.label}</dt>
+              <dd className="text-right font-medium">{field.value}</dd>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-muted-foreground">Status</dt>
+            <dd>
+              <Badge
+                variant={user.status === "suspended" ? "destructive" : "outline"}
+              >
+                {STATUS_LABELS[user.status]}
+              </Badge>
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PermissionsCard({ role }: { role: AppRole }) {
+  const { allowed, denied } = PERMISSIONS[role];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>What you can do</CardTitle>
+        <CardDescription>
+          Your access is set by the {ROLE_LABELS[role]} role.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="grid gap-2">
+          {allowed.map((item) => (
+            <li key={item} className="flex items-start gap-2">
+              <CheckIcon className="mt-0.5 size-4 shrink-0" />
+              <span>{item}</span>
+            </li>
+          ))}
+          {denied.map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-2 text-muted-foreground"
+            >
+              <MinusIcon className="mt-0.5 size-4 shrink-0" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
 
 async function AdminStats() {
   const supabase = await createClient();
@@ -88,6 +194,11 @@ export default async function DashboardPage({
       </header>
 
       {user.role === "admin" ? <AdminStats /> : null}
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <AccountCard user={user} />
+        <PermissionsCard role={user.role} />
+      </section>
     </div>
   );
 }

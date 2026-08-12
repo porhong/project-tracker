@@ -11,6 +11,8 @@ export type CurrentUser = {
   fullName: string | null;
   role: AppRole;
   status: UserStatus;
+  /** Null when resolved from claims alone -- only the profile carries it. */
+  createdAt: string | null;
 };
 
 /**
@@ -35,6 +37,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     // that as the least-privileged role rather than failing open.
     role: role ?? "viewer",
     status: status ?? "active",
+    createdAt: null,
   };
 });
 
@@ -57,7 +60,7 @@ export const requireProfile = cache(async (): Promise<CurrentUser> => {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("full_name, role, status")
+    .select("full_name, role, status, created_at")
     .eq("id", user.id)
     .single();
 
@@ -69,6 +72,7 @@ export const requireProfile = cache(async (): Promise<CurrentUser> => {
     fullName: profile.full_name,
     role: profile.role,
     status: profile.status,
+    createdAt: profile.created_at,
   };
 });
 

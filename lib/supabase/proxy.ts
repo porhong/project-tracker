@@ -87,7 +87,35 @@ export async function updateSession(request: NextRequest) {
     return redirectTo("/dashboard");
   }
 
-  if (isAdminPath(pathname) && role !== "admin") {
+  // `user_role` is a cache of `profiles.role` baked into the access token, so
+  // it can be a full token lifetime behind a role change. Two cases must not
+  // ride on a stale value:
+  //
+  //   promoted -- the nav reads the profile and offers Users, but the claim
+  //     still says viewer, so this check would bounce them off a page they are
+  //     entitled to;
+  //   demoted -- the claim still says admin, and RLS reads the claim rather
+  //     than the row, so it keeps granting reads the profile no longer allows.
+  //
+  // Refreshing re-runs the access-token hook and settles both. The profile read
+  // costs one indexed lookup, and only for admin claims or admin paths.
+  let effectiveRole = role;
+
+  if (role === "admin" || isAdminPath(pathname)) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", claims.sub)
+      .single();
+
+    if (profile && profile.role !== role) {
+      await supabase.auth.refreshSession();
+      const { data: refreshed } = await supabase.auth.getClaims();
+      effectiveRole = readRoleClaims(refreshed?.claims).role;
+    }
+  }
+
+  if (isAdminPath(pathname) && effectiveRole !== "admin") {
     return redirectTo("/dashboard", { error: "forbidden" });
   }
 
