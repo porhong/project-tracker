@@ -58,7 +58,12 @@ export function isPublicPath(pathname: string) {
 }
 
 /** Paths only an admin may reach. */
-export const ADMIN_PATHS = ["/dashboard/users"] as const;
+export const ADMIN_PATHS = [
+  "/dashboard/users",
+  "/dashboard/projects",
+  "/dashboard/sprints",
+  "/dashboard/settings",
+] as const;
 
 export function isAdminPath(pathname: string) {
   return ADMIN_PATHS.some(

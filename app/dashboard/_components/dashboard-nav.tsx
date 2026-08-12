@@ -9,7 +9,14 @@ export function DashboardNav({ isAdmin }: { isAdmin: boolean }) {
 
   const links = [
     { href: "/dashboard", label: "Overview", exact: true },
-    ...(isAdmin ? [{ href: "/dashboard/users", label: "Users" }] : []),
+    ...(isAdmin
+      ? [
+          { href: "/dashboard/projects", label: "Projects" },
+          { href: "/dashboard/sprints", label: "Sprints" },
+          { href: "/dashboard/users", label: "Users" },
+          { href: "/dashboard/settings", label: "Settings" },
+        ]
+      : []),
   ];
 
   return (
