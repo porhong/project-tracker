@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminPath, isPublicPath, readRoleClaims } from "@/lib/auth/roles";
+import type { Database } from "./database.types";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -8,7 +10,7 @@ export async function updateSession(request: NextRequest) {
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
@@ -42,7 +44,52 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getClaims() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+
+  // Any redirect below must carry the cookies Supabase just wrote, otherwise
+  // the browser and server go out of sync and the session dies. See the note
+  // at the bottom of this function.
+  const redirectTo = (pathname: string, params?: Record<string, string>) => {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname;
+    url.search = "";
+    Object.entries(params ?? {}).forEach(([key, value]) =>
+      url.searchParams.set(key, value),
+    );
+
+    const response = NextResponse.redirect(url);
+    supabaseResponse.cookies
+      .getAll()
+      .forEach((cookie) => response.cookies.set(cookie));
+    return response;
+  };
+
+  const { pathname } = request.nextUrl;
+  const claims = data?.claims ?? null;
+  const { role, status } = readRoleClaims(claims);
+
+  if (!claims) {
+    if (isPublicPath(pathname)) return supabaseResponse;
+    return redirectTo("/login", pathname === "/" ? undefined : { next: pathname });
+  }
+
+  // A suspended user is banned at the Auth layer, so they cannot refresh their
+  // token -- but an already-issued one stays valid until it expires. Cut the
+  // session short here rather than waiting that out.
+  if (status === "suspended") {
+    await supabase.auth.signOut();
+    return redirectTo("/login", { error: "suspended" });
+  }
+
+  // Signed in already: bounce off the entry points. `/auth/*` is deliberately
+  // excluded -- sign-out lives there and must stay reachable.
+  if (pathname === "/" || pathname === "/login") {
+    return redirectTo("/dashboard");
+  }
+
+  if (isAdminPath(pathname) && role !== "admin") {
+    return redirectTo("/dashboard", { error: "forbidden" });
+  }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
   // creating a new response object with NextResponse.next() make sure to:
