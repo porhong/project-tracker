@@ -17,6 +17,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -44,6 +71,84 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      sprints: {
+        Row: {
+          created_at: string
+          daily_work_hours: number
+          description: string | null
+          end_date: string
+          id: string
+          name: string
+          planned_capacity_hours: number
+          project_id: string
+          sprint_number: number
+          start_date: string
+          status: string
+          updated_at: string
+          version: string
+          working_days: number[]
+        }
+        Insert: {
+          created_at?: string
+          daily_work_hours: number
+          description?: string | null
+          end_date: string
+          id?: string
+          name: string
+          project_id: string
+          sprint_number: number
+          start_date: string
+          status?: string
+          updated_at?: string
+          version: string
+          working_days: number[]
+        }
+        Update: {
+          created_at?: string
+          daily_work_hours?: number
+          description?: string | null
+          end_date?: string
+          id?: string
+          name?: string
+          project_id?: string
+          sprint_number?: number
+          start_date?: string
+          status?: string
+          updated_at?: string
+          version?: string
+          working_days?: number[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sprints_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_settings: {
+        Row: {
+          daily_work_hours: number
+          id: boolean
+          updated_at: string
+          working_days: number[]
+        }
+        Insert: {
+          daily_work_hours?: number
+          id?: boolean
+          updated_at?: string
+          working_days?: number[]
+        }
+        Update: {
+          daily_work_hours?: number
+          id?: boolean
+          updated_at?: string
+          working_days?: number[]
         }
         Relationships: []
       }
