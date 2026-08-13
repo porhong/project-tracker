@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth/guards";
+import { memberAvailableHours } from "@/lib/sprint-capacity";
 import { createClient } from "@/lib/supabase/server";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-type AllocationInput = { activity_id: string; hours_per_day: number };
+type AllocationInput = { activity_id: string; hours: number };
 type TimeOffInput = { start_date: string; end_date: string };
 type ActivityNoteInput = { activity: string; note: string | null };
 
@@ -65,24 +66,24 @@ function parsePlan(formData: FormData):
     for (const value of allocationsRaw) {
       if (!isRecord(value)) return { error: "Invalid activity allocation." };
       const activityId = String(value.activity_id ?? "");
-      const hours = Number(value.hours_per_day);
+      const hours = Number(value.hours);
       if (
         !UUID_PATTERN.test(activityId) ||
         !Number.isFinite(hours) ||
         hours < 0.25 ||
-        hours > 24 ||
+        hours > 100_000 ||
         Math.round(hours * 100) !== hours * 100
       ) {
         return {
           error:
-            "Activity hours must be between 0.25 and 24, using at most two decimal places.",
+            "Activity hours must be between 0.25 and 100,000, using at most two decimal places.",
         };
       }
       if (activityIds.has(activityId)) {
         return { error: "Each activity can only be allocated once." };
       }
       activityIds.add(activityId);
-      allocations.push({ activity_id: activityId, hours_per_day: hours });
+      allocations.push({ activity_id: activityId, hours });
     }
 
     const timeOff: TimeOffInput[] = [];
@@ -144,7 +145,7 @@ export async function saveMyActiveSprintPlan(
     await Promise.all([
       supabase
         .from("sprints")
-        .select("start_date, end_date, status")
+        .select("start_date, end_date, working_days, daily_work_hours, status")
         .eq("id", sprintId)
         .single(),
       plan.data.allocations.length
@@ -181,6 +182,16 @@ export async function saveMyActiveSprintPlan(
     )
   ) {
     return fail("Time off must fall within the active sprint date range.");
+  }
+  const allocatedHours = plan.data.allocations.reduce(
+    (total, allocation) => total + allocation.hours,
+    0,
+  );
+  const availableHours = memberAvailableHours(sprint, plan.data.timeOff);
+  if (Math.round(allocatedHours * 100) !== Math.round(availableHours * 100)) {
+    return fail(
+      `Allocated hours (${allocatedHours}) must exactly match your available sprint hours (${availableHours}).`,
+    );
   }
 
   const { error } = await supabase.rpc("replace_my_active_sprint_plan", {

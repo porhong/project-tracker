@@ -16,7 +16,7 @@ export default async function SprintsPage() {
     supabase.from("activity_types").select("id, name, is_active").order("name"),
     supabase.from("project_members").select("project_id, user_id"),
     supabase.from("profiles").select("id, email, full_name, competency, status").eq("status", "active"),
-    supabase.from("sprint_member_allocations").select("id, sprint_id, user_id, activity_id, hours_per_day"),
+    supabase.from("sprint_member_allocations").select("id, sprint_id, user_id, activity_id, hours"),
     supabase.from("sprint_member_time_off").select("id, sprint_id, user_id, start_date, end_date"),
     supabase.from("sprint_member_activity_notes").select("id, sprint_id, user_id, activity, note"),
   ]);

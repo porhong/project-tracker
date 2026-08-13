@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { memberAvailableHours } from "@/lib/sprint-capacity";
 import { saveMyActiveSprintPlan, type ActionResult } from "../actions";
 
-type Allocation = { activity_id: string; hours_per_day: number };
+type Allocation = { activity_id: string; hours: number };
 type TimeOff = { start_date: string; end_date: string };
 type Note = { activity: string; note: string | null };
 
@@ -17,6 +18,8 @@ type Props = {
   sprintId: string;
   startDate: string;
   endDate: string;
+  workingDays: number[];
+  dailyWorkHours: number;
   activities: { id: string; name: string }[];
   allocations: Allocation[];
   timeOff: TimeOff[];
@@ -27,6 +30,8 @@ export function MySprintActivityEditor({
   sprintId,
   startDate,
   endDate,
+  workingDays,
+  dailyWorkHours,
   activities,
   allocations,
   timeOff,
@@ -41,7 +46,7 @@ export function MySprintActivityEditor({
       Object.fromEntries(
         allocations.map((allocation) => [
           allocation.activity_id,
-          String(allocation.hours_per_day),
+          String(allocation.hours),
         ]),
       ),
   );
@@ -52,9 +57,9 @@ export function MySprintActivityEditor({
     () => ({
       allocations: Object.entries(allocationValues).flatMap(
         ([activity_id, value]) => {
-          const hours_per_day = Number(value);
-          return Number.isFinite(hours_per_day) && hours_per_day > 0
-            ? [{ activity_id, hours_per_day }]
+          const hours = Number(value);
+          return Number.isFinite(hours) && hours > 0
+            ? [{ activity_id, hours }]
             : [];
         },
       ),
@@ -65,6 +70,21 @@ export function MySprintActivityEditor({
     }),
     [allocationValues, notesValues, timeOffValues],
   );
+  const availableHours = memberAvailableHours(
+    {
+      start_date: startDate,
+      end_date: endDate,
+      working_days: workingDays,
+      daily_work_hours: dailyWorkHours,
+    },
+    payload.timeOff,
+  );
+  const allocatedHours = payload.allocations.reduce(
+    (total, allocation) => total + allocation.hours,
+    0,
+  );
+  const remainingHours = Math.round((availableHours - allocatedHours) * 100) / 100;
+  const matchesAvailableHours = remainingHours === 0;
 
   return (
     <form action={formAction} className="space-y-5">
@@ -74,7 +94,7 @@ export function MySprintActivityEditor({
       <input type="hidden" name="activity_notes" value={JSON.stringify(payload.notes)} />
 
       <fieldset className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <legend className="text-sm font-medium">Hours per working day</legend>
+        <legend className="text-sm font-medium">Total hours for this sprint</legend>
         {activities.map((activity) => (
           <div key={activity.id} className="space-y-2">
             <Label htmlFor={`${sprintId}-${activity.id}`}>{activity.name}</Label>
@@ -82,7 +102,6 @@ export function MySprintActivityEditor({
               id={`${sprintId}-${activity.id}`}
               type="number"
               min="0"
-              max="24"
               step="0.25"
               value={allocationValues[activity.id] ?? ""}
               onChange={(event) =>
@@ -96,6 +115,16 @@ export function MySprintActivityEditor({
           </div>
         ))}
       </fieldset>
+      <Alert variant={remainingHours < 0 ? "destructive" : "default"}>
+        <AlertDescription>
+          Available: {availableHours}h · Allocated: {allocatedHours}h
+          {matchesAvailableHours
+            ? " · Your allocation matches available hours."
+            : remainingHours < 0
+              ? ` · Reduce your allocation by ${Math.abs(remainingHours)}h before saving.`
+              : ` · Allocate ${remainingHours}h more before saving.`}
+        </AlertDescription>
+      </Alert>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -252,7 +281,7 @@ export function MySprintActivityEditor({
           <AlertDescription>Your sprint activity has been saved.</AlertDescription>
         </Alert>
       ) : null}
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending || !matchesAvailableHours}>
         {pending ? "Saving…" : "Save my sprint activity"}
       </Button>
     </form>

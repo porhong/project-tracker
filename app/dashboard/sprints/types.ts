@@ -31,7 +31,7 @@ export type SprintMemberRow = Pick<
 
 export type SprintMemberAllocationRow = Pick<
   Tables<"sprint_member_allocations">,
-  "id" | "sprint_id" | "user_id" | "activity_id" | "hours_per_day"
+  "id" | "sprint_id" | "user_id" | "activity_id" | "hours"
 >;
 
 export type SprintMemberTimeOffRow = Pick<

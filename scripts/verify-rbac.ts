@@ -166,7 +166,7 @@ try {
     "replace_my_active_sprint_plan",
     {
       p_sprint_id: activeSprint.id,
-      p_allocations: [{ activity_id: activity.id, hours_per_day: 4 }],
+      p_allocations: [{ activity_id: activity.id, hours: 72 }],
       p_time_off: [{ start_date: "2026-08-12", end_date: "2026-08-12" }],
       p_activity_notes: [{ activity: "Verification", note: "Own active plan" }],
     },
@@ -187,7 +187,7 @@ try {
       sprint_id: activeSprint.id,
       user_id: viewerId,
       activity_id: activity.id,
-      hours_per_day: 1,
+      hours: 1,
     });
   record(
     "user cannot write another member’s sprint activity",
@@ -224,23 +224,23 @@ try {
     Boolean(draftPlanError),
     draftPlanError?.message ?? "write SUCCEEDED",
   );
-  const { error: clearPlanError } = await userScoped.rpc(
+  const { error: incompletePlanError } = await userScoped.rpc(
     "replace_my_active_sprint_plan",
     {
       p_sprint_id: activeSprint.id,
-      p_allocations: [],
+      p_allocations: [{ activity_id: activity.id, hours: 1 }],
       p_time_off: [],
       p_activity_notes: [],
     },
   );
-  const { data: clearedPlan } = await userScoped
+  const { data: preservedPlan } = await userScoped
     .from("sprint_member_allocations")
-    .select("id")
+    .select("hours")
     .eq("sprint_id", activeSprint.id);
   record(
-    "user can clear their own active sprint plan",
-    !clearPlanError && (clearedPlan?.length ?? 0) === 0,
-    clearPlanError?.message ?? `rows=${clearedPlan?.length}`,
+    "user cannot save an allocation below available hours",
+    Boolean(incompletePlanError) && preservedPlan?.[0]?.hours === 72,
+    incompletePlanError?.message ?? `hours=${preservedPlan?.[0]?.hours}`,
   );
 
   // 6. RLS through PostgREST: viewer sees only themselves.

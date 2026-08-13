@@ -43,7 +43,7 @@ export default async function MySprintActivityPage() {
     supabase.from("projects").select("id, name"),
     supabase
       .from("sprint_member_allocations")
-      .select("sprint_id, activity_id, hours_per_day")
+      .select("sprint_id, activity_id, hours")
       .eq("user_id", user.id),
     supabase
       .from("sprint_member_time_off")
@@ -132,7 +132,7 @@ export default async function MySprintActivityPage() {
             const available = memberAvailableHours(sprint, sprintTimeOff);
             const allocated = sprintAllocations.reduce(
               (total, allocation) =>
-                total + Number(allocation.hours_per_day) * days,
+                total + Number(allocation.hours),
               0,
             );
             const editable = user.role === "user" && sprint.status === "active";
@@ -177,6 +177,8 @@ export default async function MySprintActivityPage() {
                       sprintId={sprint.id}
                       startDate={sprint.start_date}
                       endDate={sprint.end_date}
+                      workingDays={sprint.working_days}
+                      dailyWorkHours={Number(sprint.daily_work_hours)}
                       activities={activeActivities}
                       allocations={sprintAllocations}
                       timeOff={sprintTimeOff}
@@ -196,7 +198,7 @@ export default async function MySprintActivityPage() {
                                   "Inactive activity"}
                               </span>
                               <span className="font-medium tabular-nums">
-                                {hours(Number(allocation.hours_per_day))}h/day
+                                {hours(Number(allocation.hours))}h
                               </span>
                             </li>
                           ))}

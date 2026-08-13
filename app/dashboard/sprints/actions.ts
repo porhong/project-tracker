@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/guards";
 import { parseReleaseNotes } from "@/lib/release-notes";
+import { memberAvailableHours } from "@/lib/sprint-capacity";
 import { isSprintStatus, type SprintStatus, WEEKDAYS } from "@/lib/sprint-config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -127,7 +128,7 @@ export async function deleteSprint(id: string): Promise<ActionResult> {
   revalidate(); return { ok: true };
 }
 
-type AllocationInput = { user_id: string; activity_id: string; hours_per_day: number };
+type AllocationInput = { user_id: string; activity_id: string; hours: number };
 type TimeOffInput = { user_id: string; start_date: string; end_date: string };
 type ActivityNoteInput = { user_id: string; activity: string; note: string | null };
 
@@ -152,14 +153,14 @@ function parsePlanInput(formData: FormData): { data: { allocations: AllocationIn
       if (!isRecord(value)) return { error: "Invalid activity allocation." };
       const userId = String(value.user_id ?? "");
       const activityId = String(value.activity_id ?? "");
-      const hours = Number(value.hours_per_day);
-      if (!userId || !activityId || !Number.isFinite(hours) || hours < 0.25 || hours > 24 || Math.round(hours * 100) !== hours * 100) {
-        return { error: "Activity hours must be between 0.25 and 24, using at most two decimal places." };
+      const hours = Number(value.hours);
+      if (!userId || !activityId || !Number.isFinite(hours) || hours < 0.25 || hours > 100_000 || Math.round(hours * 100) !== hours * 100) {
+        return { error: "Activity hours must be between 0.25 and 100,000, using at most two decimal places." };
       }
       const key = `${userId}:${activityId}`;
       if (allocationKeys.has(key)) return { error: "Each activity can only be allocated once per member." };
       allocationKeys.add(key);
-      allocations.push({ user_id: userId, activity_id: activityId, hours_per_day: hours });
+      allocations.push({ user_id: userId, activity_id: activityId, hours });
     }
 
     const timeOff: TimeOffInput[] = [];
@@ -201,7 +202,7 @@ async function loadEditableSprint(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("sprints")
-    .select("id, project_id, status, start_date, end_date")
+    .select("id, project_id, status, start_date, end_date, working_days, daily_work_hours")
     .eq("id", id)
     .single();
   if (error || !data) return { error: "Sprint not found." } as const;
@@ -211,23 +212,38 @@ async function loadEditableSprint(id: string) {
 
 async function validatePlanReferences(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  sprint: { project_id: string; start_date: string; end_date: string },
+  sprint: { project_id: string; start_date: string; end_date: string; working_days: number[]; daily_work_hours: number },
   plan: { allocations: AllocationInput[]; timeOff: TimeOffInput[]; notes: ActivityNoteInput[] },
 ) {
   const userIds = [...new Set([...plan.allocations, ...plan.timeOff, ...plan.notes].map((record) => record.user_id))];
   const activityIds = [...new Set(plan.allocations.map((record) => record.activity_id))];
-  const [{ data: members, error: membersError }, { data: profiles, error: profilesError }, { data: activities, error: activitiesError }] = await Promise.all([
-    userIds.length ? supabase.from("project_members").select("user_id").eq("project_id", sprint.project_id).in("user_id", userIds) : Promise.resolve({ data: [], error: null }),
-    userIds.length ? supabase.from("profiles").select("id, status").in("id", userIds) : Promise.resolve({ data: [], error: null }),
+  const [{ data: members, error: membersError }, { data: activities, error: activitiesError }] = await Promise.all([
+    supabase.from("project_members").select("user_id").eq("project_id", sprint.project_id),
     activityIds.length ? supabase.from("activity_types").select("id, is_active").in("id", activityIds) : Promise.resolve({ data: [], error: null }),
   ]);
-  if (membersError || profilesError || activitiesError) return "Could not validate the sprint plan.";
+  if (membersError || activitiesError) return "Could not validate the sprint plan.";
+  const memberIds = (members ?? []).map((member) => member.user_id);
+  const { data: profiles, error: profilesError } = memberIds.length
+    ? await supabase.from("profiles").select("id, status").in("id", memberIds)
+    : { data: [], error: null };
+  if (profilesError) return "Could not validate the sprint plan.";
   const validUsers = new Set((members ?? []).map((member) => member.user_id));
   const activeUsers = new Set((profiles ?? []).filter((profile) => profile.status === "active").map((profile) => profile.id));
   if (userIds.some((id) => !validUsers.has(id) || !activeUsers.has(id))) return "Every planned member must be an active member of this project.";
   const activeActivities = new Set((activities ?? []).filter((activity) => activity.is_active).map((activity) => activity.id));
   if (activityIds.some((id) => !activeActivities.has(id))) return "Choose active work activities.";
   if (plan.timeOff.some((record) => record.start_date < sprint.start_date || record.end_date > sprint.end_date)) return "Time off must fall within the sprint date range.";
+  const activeMemberIds = [...validUsers].filter((id) => activeUsers.has(id));
+  for (const memberId of activeMemberIds) {
+    const memberTimeOff = plan.timeOff.filter((record) => record.user_id === memberId);
+    const allocatedHours = plan.allocations
+      .filter((record) => record.user_id === memberId)
+      .reduce((total, record) => total + record.hours, 0);
+    const availableHours = memberAvailableHours(sprint, memberTimeOff);
+    if (Math.round(allocatedHours * 100) !== Math.round(availableHours * 100)) {
+      return `Allocated hours (${allocatedHours}) must exactly match available hours (${availableHours}) for every active project member.`;
+    }
+  }
   return null;
 }
 
@@ -245,64 +261,14 @@ export async function saveSprintMemberPlan(
   const referenceError = await validatePlanReferences(editable.supabase, editable.data, plan.data);
   if (referenceError) return fail(referenceError);
 
-  const { error: deleteAllocationsError } = await editable.supabase.from("sprint_member_allocations").delete().eq("sprint_id", id);
-  if (deleteAllocationsError) return fail(deleteAllocationsError.message);
-  const { error: deleteTimeOffError } = await editable.supabase.from("sprint_member_time_off").delete().eq("sprint_id", id);
-  if (deleteTimeOffError) return fail(deleteTimeOffError.message);
-  const { error: deleteNotesError } = await editable.supabase.from("sprint_member_activity_notes").delete().eq("sprint_id", id);
-  if (deleteNotesError) return fail(deleteNotesError.message);
-  if (plan.data.allocations.length) {
-    const { error } = await editable.supabase.from("sprint_member_allocations").insert(plan.data.allocations.map((record) => ({ ...record, sprint_id: id })));
-    if (error) return fail(error.message);
-  }
-  if (plan.data.timeOff.length) {
-    const { error } = await editable.supabase.from("sprint_member_time_off").insert(plan.data.timeOff.map((record) => ({ ...record, sprint_id: id })));
-    if (error) return fail(error.message);
-  }
-  if (plan.data.notes.length) {
-    const { error } = await editable.supabase.from("sprint_member_activity_notes").insert(plan.data.notes.map((record) => ({ ...record, sprint_id: id })));
-    if (error) return fail(error.message);
-  }
+  const { error } = await editable.supabase.rpc("replace_sprint_member_plan", {
+    p_sprint_id: id,
+    p_allocations: plan.data.allocations,
+    p_time_off: plan.data.timeOff,
+    p_activity_notes: plan.data.notes,
+  });
+  if (error) return fail(error.message);
   revalidate();
   revalidatePath("/dashboard/my-sprint-activity");
   return { ok: true };
-}
-
-export async function copyPreviousSprintMemberPlan(id: string): Promise<ActionResult> {
-  await requireAdmin();
-  if (!id) return fail("Missing sprint.");
-  const editable = await loadEditableSprint(id);
-  if ("error" in editable) return fail(editable.error ?? "Sprint not found.");
-  const [{ count: allocationCount, error: allocationCountError }, { count: timeOffCount, error: timeOffCountError }] = await Promise.all([
-    editable.supabase.from("sprint_member_allocations").select("id", { count: "exact", head: true }).eq("sprint_id", id),
-    editable.supabase.from("sprint_member_time_off").select("id", { count: "exact", head: true }).eq("sprint_id", id),
-  ]);
-  if (allocationCountError || timeOffCountError) return fail("Could not check the existing sprint plan.");
-  if ((allocationCount ?? 0) > 0 || (timeOffCount ?? 0) > 0) return fail("Clear the current plan before copying a previous one.");
-
-  const { data: previousSprints, error: previousError } = await editable.supabase
-    .from("sprints")
-    .select("id")
-    .eq("project_id", editable.data.project_id)
-    .neq("id", id)
-    .in("status", ["active", "completed"])
-    .order("start_date", { ascending: false });
-  if (previousError) return fail(previousError.message);
-  for (const previous of previousSprints ?? []) {
-    const { data: allocations, error } = await editable.supabase
-      .from("sprint_member_allocations")
-      .select("user_id, activity_id, hours_per_day")
-      .eq("sprint_id", previous.id);
-    if (error) return fail(error.message);
-    if (!allocations?.length) continue;
-    const plan = { allocations, timeOff: [] as TimeOffInput[], notes: [] as ActivityNoteInput[] };
-    const referenceError = await validatePlanReferences(editable.supabase, editable.data, plan);
-    if (referenceError) return fail(referenceError);
-    const { error: insertError } = await editable.supabase.from("sprint_member_allocations").insert(allocations.map((record) => ({ ...record, sprint_id: id })));
-    if (insertError) return fail(insertError.message);
-    revalidate();
-    revalidatePath("/dashboard/my-sprint-activity");
-    return { ok: true };
-  }
-  return fail("No previous sprint plan with activity allocations was found for this project.");
 }

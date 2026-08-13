@@ -198,7 +198,7 @@ export type Database = {
         Row: {
           activity_id: string
           created_at: string
-          hours_per_day: number
+          hours: number
           id: string
           sprint_id: string
           updated_at: string
@@ -207,7 +207,7 @@ export type Database = {
         Insert: {
           activity_id: string
           created_at?: string
-          hours_per_day: number
+          hours: number
           id?: string
           sprint_id: string
           updated_at?: string
@@ -216,7 +216,7 @@ export type Database = {
         Update: {
           activity_id?: string
           created_at?: string
-          hours_per_day?: number
+          hours?: number
           id?: string
           sprint_id?: string
           updated_at?: string
@@ -364,6 +364,15 @@ export type Database = {
     Functions: {
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       replace_my_active_sprint_plan: {
+        Args: {
+          p_activity_notes: Json
+          p_allocations: Json
+          p_sprint_id: string
+          p_time_off: Json
+        }
+        Returns: undefined
+      }
+      replace_sprint_member_plan: {
         Args: {
           p_activity_notes: Json
           p_allocations: Json
