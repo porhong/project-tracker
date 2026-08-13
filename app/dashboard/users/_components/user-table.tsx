@@ -61,6 +61,7 @@ export function UserTable({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Competency</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
@@ -80,6 +81,9 @@ export function UserTable({
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {user.email}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {user.competency || "—"}
                 </TableCell>
                 <TableCell>
                   <Badge

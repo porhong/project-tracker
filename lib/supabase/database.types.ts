@@ -46,6 +46,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          competency: string | null
           created_at: string
           email: string
           full_name: string | null
@@ -55,6 +56,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          competency?: string | null
           created_at?: string
           email: string
           full_name?: string | null
@@ -64,6 +66,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          competency?: string | null
           created_at?: string
           email?: string
           full_name?: string | null
@@ -73,6 +76,39 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      project_members: {
+        Row: {
+          created_at: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sprints: {
         Row: {

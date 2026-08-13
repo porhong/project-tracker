@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const MIN_PASSWORD_LENGTH = 8;
+const MAX_COMPETENCY_LENGTH = 120;
 
 function fail(error: string): ActionResult {
   return { ok: false, error };
@@ -59,6 +60,7 @@ export async function createUser(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("full_name") ?? "").trim();
+  const competency = String(formData.get("competency") ?? "").trim();
   const role = formData.get("role");
 
   if (!email) return fail("Email is required.");
@@ -66,6 +68,9 @@ export async function createUser(
     return fail(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
   }
   if (!isAppRole(role)) return fail("Select a valid role.");
+  if (competency.length > MAX_COMPETENCY_LENGTH) {
+    return fail(`Competency must be at most ${MAX_COMPETENCY_LENGTH} characters.`);
+  }
 
   const admin = createAdminClient();
   const { data: created, error } = await admin.auth.admin.createUser({
@@ -92,7 +97,7 @@ export async function createUser(
   // saw no role and defaulted to 'viewer'. Set the real role explicitly.
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ role, full_name: fullName || null })
+    .update({ role, full_name: fullName || null, competency: competency || null })
     .eq("id", created.user.id);
 
   if (profileError) {
@@ -114,6 +119,7 @@ export async function updateUser(
   const id = String(formData.get("id") ?? "");
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const fullName = String(formData.get("full_name") ?? "").trim();
+  const competency = String(formData.get("competency") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const role = formData.get("role");
 
@@ -122,6 +128,9 @@ export async function updateUser(
   if (!isAppRole(role)) return fail("Select a valid role.");
   if (password && password.length < MIN_PASSWORD_LENGTH) {
     return fail(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  if (competency.length > MAX_COMPETENCY_LENGTH) {
+    return fail(`Competency must be at most ${MAX_COMPETENCY_LENGTH} characters.`);
   }
 
   const admin = createAdminClient();
@@ -165,7 +174,12 @@ export async function updateUser(
 
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ email, full_name: fullName || null, role: role as AppRole })
+    .update({
+      email,
+      full_name: fullName || null,
+      competency: competency || null,
+      role: role as AppRole,
+    })
     .eq("id", id);
 
   if (profileError) return fail(profileError.message);

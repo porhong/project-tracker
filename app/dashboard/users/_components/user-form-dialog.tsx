@@ -87,6 +87,20 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="competency">Competency</Label>
+            <Input
+              id="competency"
+              name="competency"
+              maxLength={120}
+              defaultValue={user?.competency ?? ""}
+              placeholder="Frontend engineering"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional primary area of expertise.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="password">
               {mode === "create" ? "Password" : "New password"}
             </Label>
