@@ -9,6 +9,7 @@ export function DashboardNav({ isAdmin }: { isAdmin: boolean }) {
 
   const links = [
     { href: "/dashboard", label: "Overview", exact: true },
+    { href: "/dashboard/my-sprint-activity", label: "My sprint activity" },
     ...(isAdmin
       ? [
           { href: "/dashboard/projects", label: "Projects" },

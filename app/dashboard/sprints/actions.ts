@@ -126,3 +126,183 @@ export async function deleteSprint(id: string): Promise<ActionResult> {
   if (error) return fail(error.message);
   revalidate(); return { ok: true };
 }
+
+type AllocationInput = { user_id: string; activity_id: string; hours_per_day: number };
+type TimeOffInput = { user_id: string; start_date: string; end_date: string };
+type ActivityNoteInput = { user_id: string; activity: string; note: string | null };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function parsePlanInput(formData: FormData): { data: { allocations: AllocationInput[]; timeOff: TimeOffInput[]; notes: ActivityNoteInput[] } } | { error: string } {
+  try {
+    const allocationsRaw: unknown = JSON.parse(String(formData.get("allocations") ?? "[]"));
+    const timeOffRaw: unknown = JSON.parse(String(formData.get("time_off") ?? "[]"));
+    const notesRaw: unknown = JSON.parse(String(formData.get("activity_notes") ?? "[]"));
+    if (!Array.isArray(allocationsRaw) || !Array.isArray(timeOffRaw) || !Array.isArray(notesRaw)) return { error: "Invalid sprint capacity plan." };
+
+    const allocations: AllocationInput[] = [];
+    const allocationKeys = new Set<string>();
+    for (const value of allocationsRaw) {
+      if (!isRecord(value)) return { error: "Invalid activity allocation." };
+      const userId = String(value.user_id ?? "");
+      const activityId = String(value.activity_id ?? "");
+      const hours = Number(value.hours_per_day);
+      if (!userId || !activityId || !Number.isFinite(hours) || hours < 0.25 || hours > 24 || Math.round(hours * 100) !== hours * 100) {
+        return { error: "Activity hours must be between 0.25 and 24, using at most two decimal places." };
+      }
+      const key = `${userId}:${activityId}`;
+      if (allocationKeys.has(key)) return { error: "Each activity can only be allocated once per member." };
+      allocationKeys.add(key);
+      allocations.push({ user_id: userId, activity_id: activityId, hours_per_day: hours });
+    }
+
+    const timeOff: TimeOffInput[] = [];
+    const rangesByUser = new Map<string, TimeOffInput[]>();
+    for (const value of timeOffRaw) {
+      if (!isRecord(value)) return { error: "Invalid time-off record." };
+      const userId = String(value.user_id ?? "");
+      const startDate = String(value.start_date ?? "");
+      const endDate = String(value.end_date ?? "");
+      if (!userId || !isDate(startDate) || !isDate(endDate) || endDate < startDate) return { error: "Choose a valid time-off date range." };
+      const record = { user_id: userId, start_date: startDate, end_date: endDate };
+      timeOff.push(record);
+      rangesByUser.set(userId, [...(rangesByUser.get(userId) ?? []), record]);
+    }
+    for (const ranges of rangesByUser.values()) {
+      ranges.sort((a, b) => a.start_date.localeCompare(b.start_date));
+      if (ranges.some((range, index) => index > 0 && range.start_date <= ranges[index - 1].end_date)) {
+        return { error: "Time-off ranges for the same member cannot overlap." };
+      }
+    }
+    const notes: ActivityNoteInput[] = [];
+    for (const value of notesRaw) {
+      if (!isRecord(value)) return { error: "Invalid activity note." };
+      const userId = String(value.user_id ?? "");
+      const activity = String(value.activity ?? "").trim();
+      const rawNote = String(value.note ?? "").trim();
+      if (!userId || !activity || activity.length > 160 || rawNote.length > 2_000) {
+        return { error: "Activity notes need an activity name of at most 160 characters and details of at most 2,000 characters." };
+      }
+      notes.push({ user_id: userId, activity, note: rawNote || null });
+    }
+    return { data: { allocations, timeOff, notes } };
+  } catch {
+    return { error: "Invalid sprint capacity plan." };
+  }
+}
+
+async function loadEditableSprint(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sprints")
+    .select("id, project_id, status, start_date, end_date")
+    .eq("id", id)
+    .single();
+  if (error || !data) return { error: "Sprint not found." } as const;
+  if (data.status === "completed") return { error: "Completed sprint plans are read-only." } as const;
+  return { data, supabase } as const;
+}
+
+async function validatePlanReferences(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  sprint: { project_id: string; start_date: string; end_date: string },
+  plan: { allocations: AllocationInput[]; timeOff: TimeOffInput[]; notes: ActivityNoteInput[] },
+) {
+  const userIds = [...new Set([...plan.allocations, ...plan.timeOff, ...plan.notes].map((record) => record.user_id))];
+  const activityIds = [...new Set(plan.allocations.map((record) => record.activity_id))];
+  const [{ data: members, error: membersError }, { data: profiles, error: profilesError }, { data: activities, error: activitiesError }] = await Promise.all([
+    userIds.length ? supabase.from("project_members").select("user_id").eq("project_id", sprint.project_id).in("user_id", userIds) : Promise.resolve({ data: [], error: null }),
+    userIds.length ? supabase.from("profiles").select("id, status").in("id", userIds) : Promise.resolve({ data: [], error: null }),
+    activityIds.length ? supabase.from("activity_types").select("id, is_active").in("id", activityIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (membersError || profilesError || activitiesError) return "Could not validate the sprint plan.";
+  const validUsers = new Set((members ?? []).map((member) => member.user_id));
+  const activeUsers = new Set((profiles ?? []).filter((profile) => profile.status === "active").map((profile) => profile.id));
+  if (userIds.some((id) => !validUsers.has(id) || !activeUsers.has(id))) return "Every planned member must be an active member of this project.";
+  const activeActivities = new Set((activities ?? []).filter((activity) => activity.is_active).map((activity) => activity.id));
+  if (activityIds.some((id) => !activeActivities.has(id))) return "Choose active work activities.";
+  if (plan.timeOff.some((record) => record.start_date < sprint.start_date || record.end_date > sprint.end_date)) return "Time off must fall within the sprint date range.";
+  return null;
+}
+
+export async function saveSprintMemberPlan(
+  _prevState: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return fail("Missing sprint.");
+  const plan = parsePlanInput(formData);
+  if ("error" in plan) return fail(plan.error);
+  const editable = await loadEditableSprint(id);
+  if ("error" in editable) return fail(editable.error ?? "Sprint not found.");
+  const referenceError = await validatePlanReferences(editable.supabase, editable.data, plan.data);
+  if (referenceError) return fail(referenceError);
+
+  const { error: deleteAllocationsError } = await editable.supabase.from("sprint_member_allocations").delete().eq("sprint_id", id);
+  if (deleteAllocationsError) return fail(deleteAllocationsError.message);
+  const { error: deleteTimeOffError } = await editable.supabase.from("sprint_member_time_off").delete().eq("sprint_id", id);
+  if (deleteTimeOffError) return fail(deleteTimeOffError.message);
+  const { error: deleteNotesError } = await editable.supabase.from("sprint_member_activity_notes").delete().eq("sprint_id", id);
+  if (deleteNotesError) return fail(deleteNotesError.message);
+  if (plan.data.allocations.length) {
+    const { error } = await editable.supabase.from("sprint_member_allocations").insert(plan.data.allocations.map((record) => ({ ...record, sprint_id: id })));
+    if (error) return fail(error.message);
+  }
+  if (plan.data.timeOff.length) {
+    const { error } = await editable.supabase.from("sprint_member_time_off").insert(plan.data.timeOff.map((record) => ({ ...record, sprint_id: id })));
+    if (error) return fail(error.message);
+  }
+  if (plan.data.notes.length) {
+    const { error } = await editable.supabase.from("sprint_member_activity_notes").insert(plan.data.notes.map((record) => ({ ...record, sprint_id: id })));
+    if (error) return fail(error.message);
+  }
+  revalidate();
+  revalidatePath("/dashboard/my-sprint-activity");
+  return { ok: true };
+}
+
+export async function copyPreviousSprintMemberPlan(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!id) return fail("Missing sprint.");
+  const editable = await loadEditableSprint(id);
+  if ("error" in editable) return fail(editable.error ?? "Sprint not found.");
+  const [{ count: allocationCount, error: allocationCountError }, { count: timeOffCount, error: timeOffCountError }] = await Promise.all([
+    editable.supabase.from("sprint_member_allocations").select("id", { count: "exact", head: true }).eq("sprint_id", id),
+    editable.supabase.from("sprint_member_time_off").select("id", { count: "exact", head: true }).eq("sprint_id", id),
+  ]);
+  if (allocationCountError || timeOffCountError) return fail("Could not check the existing sprint plan.");
+  if ((allocationCount ?? 0) > 0 || (timeOffCount ?? 0) > 0) return fail("Clear the current plan before copying a previous one.");
+
+  const { data: previousSprints, error: previousError } = await editable.supabase
+    .from("sprints")
+    .select("id")
+    .eq("project_id", editable.data.project_id)
+    .neq("id", id)
+    .in("status", ["active", "completed"])
+    .order("start_date", { ascending: false });
+  if (previousError) return fail(previousError.message);
+  for (const previous of previousSprints ?? []) {
+    const { data: allocations, error } = await editable.supabase
+      .from("sprint_member_allocations")
+      .select("user_id, activity_id, hours_per_day")
+      .eq("sprint_id", previous.id);
+    if (error) return fail(error.message);
+    if (!allocations?.length) continue;
+    const plan = { allocations, timeOff: [] as TimeOffInput[], notes: [] as ActivityNoteInput[] };
+    const referenceError = await validatePlanReferences(editable.supabase, editable.data, plan);
+    if (referenceError) return fail(referenceError);
+    const { error: insertError } = await editable.supabase.from("sprint_member_allocations").insert(allocations.map((record) => ({ ...record, sprint_id: id })));
+    if (insertError) return fail(insertError.message);
+    revalidate();
+    revalidatePath("/dashboard/my-sprint-activity");
+    return { ok: true };
+  }
+  return fail("No previous sprint plan with activity allocations was found for this project.");
+}

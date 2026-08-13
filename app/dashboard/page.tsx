@@ -34,11 +34,12 @@ const PERMISSIONS: Record<AppRole, { allowed: string[]; denied: string[] }> = {
       "View the overview",
       "Create, edit, and remove accounts",
       "Change roles, suspend and restore access",
+      "Plan member capacity and sprint activity",
     ],
     denied: [],
   },
   viewer: {
-    allowed: ["View the overview", "View your own account details"],
+    allowed: ["View the overview", "View your own account details", "View your own sprint activity"],
     denied: [
       "Create, edit, or remove accounts",
       "Change roles, suspend or restore access",

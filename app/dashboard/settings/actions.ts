@@ -35,3 +35,49 @@ export async function updateWorkspaceSettings(
   revalidatePath("/dashboard/sprints");
   return { ok: true };
 }
+
+function revalidateActivities() {
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/sprints");
+  revalidatePath("/dashboard/my-sprint-activity");
+}
+
+export async function createActivity(
+  _prevState: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name || name.length > 80) {
+    return { ok: false, error: "Activity name is required and must be at most 80 characters." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("activity_types").insert({ name });
+  if (error) {
+    return {
+      ok: false,
+      error: error.message.includes("activity_types_name_key")
+        ? "An activity with that name already exists."
+        : error.message,
+    };
+  }
+  revalidateActivities();
+  return { ok: true };
+}
+
+export async function setActivityActive(
+  id: string,
+  isActive: boolean,
+): Promise<ActionResult> {
+  await requireAdmin();
+  if (!id) return { ok: false, error: "Missing activity." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("activity_types")
+    .update({ is_active: isActive })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidateActivities();
+  return { ok: true };
+}
