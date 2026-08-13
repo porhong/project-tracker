@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { AppRole } from "@/lib/auth/roles";
 import { cn } from "@/lib/utils";
 
-export function DashboardNav({ isAdmin }: { isAdmin: boolean }) {
+export function DashboardNav({ role }: { role: AppRole }) {
   const pathname = usePathname();
+  const isAdmin = role === "admin";
 
   const links = [
     { href: "/dashboard", label: "Overview", exact: true },
-    { href: "/dashboard/my-sprint-activity", label: "My sprint activity" },
+    ...(role !== "viewer"
+      ? [{ href: "/dashboard/my-sprint-activity", label: "My sprint activity" }]
+      : []),
     ...(isAdmin
       ? [
           { href: "/dashboard/projects", label: "Projects" },

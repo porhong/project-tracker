@@ -8,29 +8,45 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# UI: shadcn preset `b27GcrRo`
+# UI: shadcn preset `b2qKnttz6` + brand primary
 
-All UI in this project comes from one shadcn preset. The preset code is a
-checksum of the resolved design tokens, so it is the fastest way to prove
-nothing has drifted:
+All UI in this project comes from one shadcn preset, re-applied with:
+
+```
+bunx shadcn apply b2qKnttz6
+```
+
+On top of that, `--primary` is hand-set to the brand colour **`#006239`**
+(`oklch(0.4365 0.1044 156.756)`, same value in `:root` and `.dark`). No shadcn
+preset theme encodes that hex — the nearest, `green`, is `#008236` — so the
+preset supplies every *derived* green token (chart ramp, sidebar, foregrounds)
+and only `--primary` is overridden. Both occurrences are commented in
+`app/globals.css`; **re-applying the preset silently reverts them**, so restore
+the override afterwards.
+
+The preset code is a checksum of the resolved design tokens, so it is the
+fastest way to prove nothing else has drifted:
 
 ```
 bunx shadcn info --json
 ```
 
-`preset.code` must be **`b27GcrRo`** and `preset.fallbacks` must be **`[]`**.
-A different code means a token changed; a non-empty `fallbacks` means a token
-could no longer be detected and was guessed. Either way, stop and fix it before
-continuing. Run this after any change to `components.json`, `app/globals.css`,
-or `app/layout.tsx`.
+`preset.code` must be **`b2qKlLVoW`** and `preset.fallbacks` must be exactly
+**`["theme"]`**. That single fallback is expected and load-bearing: the brand
+`--primary` no longer matches the `green` theme, so detection cannot recognise
+it and guesses (reporting `theme: neutral`, which is wrong — ignore it).
+Any *other* code, or any fallback beyond `theme`, means real drift — stop and
+fix it before continuing. Run this after any change to `components.json`,
+`app/globals.css`, or `app/layout.tsx`.
 
 | | |
 | --- | --- |
 | style / base | `rhea` / `base` — **Base UI**, not Radix |
-| baseColor, theme, chartColor | `neutral` |
+| baseColor | `neutral` |
+| theme, chartColor | `green` — but `--primary` is overridden to `#006239` |
 | iconLibrary | `lucide` |
 | font / fontHeading | `inter` / `inherit` |
-| radius / menuAccent / menuColor | `default` / `subtle` / `default` |
+| radius / menuAccent / menuColor | `small` (`0.45rem`) / `subtle` / `default` |
 
 ## Rules
 
@@ -44,7 +60,9 @@ or `app/layout.tsx`.
 2. **Never hand-write a file into `components/ui/`.** Add components with
    `bunx shadcn@latest add <name>` so they come from the `base-rhea` registry.
    Never hand-edit the `style`/`baseColor` fields in `components.json` or the
-   token blocks in `app/globals.css` — re-run the preset instead.
+   token blocks in `app/globals.css` — re-run the preset instead. The two
+   commented `--primary` lines are the one sanctioned exception; every other
+   token must come from the preset.
 
 3. **Check `components/ui/` before building any UI.** If a component exists,
    use it. Do not hand-roll markup that duplicates one — that is how the app

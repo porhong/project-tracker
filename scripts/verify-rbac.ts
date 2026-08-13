@@ -32,10 +32,20 @@ const results: string[] = [];
 const record = (label: string, pass: boolean, detail = "") =>
   results.push(`${pass ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
 
+function errorDetail(error: unknown) {
+  if (error instanceof Error) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 let adminId = "";
 let viewerId = "";
 let userId = "";
 let projectId = "";
+let unassignedProjectId = "";
 
 try {
   // 1. Public sign-up must be rejected.
@@ -256,6 +266,51 @@ try {
       },
     },
   });
+  const { error: viewerMemberError } = await admin
+    .from("project_members")
+    .insert({ project_id: projectId, user_id: viewerId });
+  if (viewerMemberError) throw viewerMemberError;
+  const { data: viewerProgress, error: viewerProgressError } =
+    await viewerScoped.rpc("get_client_project_sprint_progress", {
+      p_project_id: projectId,
+    });
+  const clientProgressRows = (viewerProgress ?? []) as Array<
+    Record<string, unknown>
+  >;
+  const clientProgress = clientProgressRows[0];
+  record(
+    "assigned viewer reads the client sprint overview",
+    !viewerProgressError &&
+      clientProgressRows.some((row) => row.sprint_id === activeSprint.id) &&
+      clientProgress !== undefined,
+    viewerProgressError?.message ?? `rows=${clientProgressRows.length}`,
+  );
+  const excludesPrivateFields = clientProgress
+    ? !["email", "role", "status", "user_id", "time_off"].some((field) =>
+        Object.hasOwn(clientProgress, field),
+      )
+    : false;
+  record(
+    "client overview excludes private member fields",
+    excludesPrivateFields,
+    clientProgress ? Object.keys(clientProgress).join(",") : "no progress row",
+  );
+  const { data: unassignedProject, error: unassignedProjectError } = await admin
+    .from("projects")
+    .insert({ name: `Verify Unassigned Project ${stamp}` })
+    .select("id")
+    .single();
+  if (unassignedProjectError || !unassignedProject) throw unassignedProjectError;
+  unassignedProjectId = unassignedProject.id;
+  const { error: unassignedProgressError } = await viewerScoped.rpc(
+    "get_client_project_sprint_progress",
+    { p_project_id: unassignedProjectId },
+  );
+  record(
+    "viewer cannot read an unassigned client project",
+    Boolean(unassignedProgressError),
+    unassignedProgressError?.message ?? "RPC SUCCEEDED",
+  );
   const { data: viewerRows } = await viewerScoped.from("profiles").select("id");
   record(
     "viewer reads only their own profile via RLS",
@@ -299,12 +354,15 @@ try {
   record(
     "unexpected error",
     false,
-    error instanceof Error ? error.message : String(error),
+    errorDetail(error),
   );
 } finally {
   if (projectId) {
     await admin.from("sprints").delete().eq("project_id", projectId);
     await admin.from("projects").delete().eq("id", projectId);
+  }
+  if (unassignedProjectId) {
+    await admin.from("projects").delete().eq("id", unassignedProjectId);
   }
   for (const id of [adminId, viewerId, userId].filter(Boolean)) {
     await admin.auth.admin.deleteUser(id);

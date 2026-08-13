@@ -12,7 +12,12 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 const weekdayValues = new Set<number>(WEEKDAYS.map((day) => day.value));
 
 function fail(error: string): ActionResult { return { ok: false, error }; }
-function revalidate() { revalidatePath("/dashboard/sprints"); revalidatePath("/dashboard/projects"); }
+function revalidate() {
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/client-overview");
+  revalidatePath("/dashboard/sprints");
+  revalidatePath("/dashboard/projects");
+}
 
 function parseWorkingDays(value: FormDataEntryValue | null) {
   const days = String(value ?? "")

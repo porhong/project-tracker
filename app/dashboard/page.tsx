@@ -12,6 +12,7 @@ import {
 import { requireProfile, type CurrentUser } from "@/lib/auth/guards";
 import { ROLE_LABELS, STATUS_LABELS, type AppRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { ClientOverview } from "./client-overview/page";
 
 export const metadata: Metadata = {
   title: "Overview · Project Tracker",
@@ -52,7 +53,11 @@ const PERMISSIONS: Record<AppRole, { allowed: string[]; denied: string[] }> = {
     ],
   },
   viewer: {
-    allowed: ["View the overview", "View your own account details", "View your own sprint activity"],
+    allowed: [
+      "View the overview",
+      "View assigned project releases and sprint activity",
+      "View your own account details",
+    ],
     denied: [
       "Create, edit, or remove accounts",
       "Change roles, suspend or restore access",
@@ -184,6 +189,9 @@ export default async function DashboardPage({
 }: PageProps<"/dashboard">) {
   const user = await requireProfile();
   const params = await searchParams;
+  if (user.role === "viewer") {
+    return <ClientOverview searchParams={Promise.resolve(params)} />;
+  }
   const error = typeof params.error === "string" ? params.error : undefined;
   const notice = error ? NOTICES[error] : undefined;
 

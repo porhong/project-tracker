@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,6 +24,7 @@ const hours = (value: number) =>
 
 export default async function MySprintActivityPage() {
   const user = await requireProfile();
+  if (user.role === "viewer") redirect("/dashboard?error=forbidden");
   const supabase = await createClient();
   const sprintStatuses = user.role === "user" ? ["active"] : ["draft", "active"];
   const [

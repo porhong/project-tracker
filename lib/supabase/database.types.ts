@@ -363,6 +363,22 @@ export type Database = {
     }
     Functions: {
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      get_client_project_sprint_progress: {
+        Args: { p_project_id: string }
+        Returns: {
+          activity_notes: Json
+          competency: string
+          member_name: string
+          planned_allocations: Json
+          sprint_id: string
+          sprint_name: string
+          sprint_number: number
+          sprint_status: string
+          start_date: string
+          end_date: string
+          version: string
+        }[]
+      }
       replace_my_active_sprint_plan: {
         Args: {
           p_activity_notes: Json

@@ -88,3 +88,13 @@ export async function requireAdmin(): Promise<CurrentUser> {
   if (user.role !== "admin") redirect("/dashboard?error=forbidden");
   return user;
 }
+
+/**
+ * Authorizes the read-only client overview. Viewer accounts are the client
+ * audience; other roles retain their existing, role-specific dashboards.
+ */
+export async function requireViewer(): Promise<CurrentUser> {
+  const user = await requireProfile();
+  if (user.role !== "viewer") redirect("/dashboard?error=forbidden");
+  return user;
+}

@@ -17,7 +17,7 @@ export default async function DashboardLayout({
             Project Tracker
           </Link>
 
-          <DashboardNav isAdmin={user.role === "admin"} />
+          <DashboardNav role={user.role} />
 
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right sm:block">
