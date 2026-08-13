@@ -139,7 +139,9 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
             <p className="text-xs text-muted-foreground">
               {role === "admin"
                 ? "Full access, including user management."
-                : "Read-only access to the dashboard."}
+                : role === "user"
+                  ? "Can manage only their own activity in active sprints."
+                  : "Read-only access to the dashboard."}
             </p>
           </div>
 

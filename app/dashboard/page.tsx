@@ -38,6 +38,19 @@ const PERMISSIONS: Record<AppRole, { allowed: string[]; denied: string[] }> = {
     ],
     denied: [],
   },
+  user: {
+    allowed: [
+      "View the overview",
+      "View your own account details",
+      "Manage your own allocation, time off, and activity notes in active sprints",
+    ],
+    denied: [
+      "Manage another member’s sprint activity",
+      "Manage activity in draft or completed sprints",
+      "Create, edit, or remove accounts",
+      "Change roles, suspend or restore access",
+    ],
+  },
   viewer: {
     allowed: ["View the overview", "View your own account details", "View your own sprint activity"],
     denied: [
@@ -143,6 +156,10 @@ async function AdminStats() {
       value: rows.filter((row) => row.role === "viewer").length,
     },
     {
+      label: "Users",
+      value: rows.filter((row) => row.role === "user").length,
+    },
+    {
       label: "Suspended",
       value: rows.filter((row) => row.status === "suspended").length,
     },
@@ -190,7 +207,9 @@ export default async function DashboardPage({
         <p className="text-sm text-muted-foreground">
           {user.role === "admin"
             ? "You can manage accounts from the Users page."
-            : "You have read-only access."}
+            : user.role === "user"
+              ? "You can manage your own activity in active sprints."
+              : "You have read-only access."}
         </p>
       </header>
 

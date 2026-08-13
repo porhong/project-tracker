@@ -3,7 +3,7 @@ import type { Enums } from "@/lib/supabase/database.types";
 export type AppRole = Enums<"app_role">;
 export type UserStatus = Enums<"user_status">;
 
-export const APP_ROLES = ["admin", "viewer"] as const satisfies readonly AppRole[];
+export const APP_ROLES = ["admin", "user", "viewer"] as const satisfies readonly AppRole[];
 export const USER_STATUSES = [
   "active",
   "suspended",
@@ -11,6 +11,7 @@ export const USER_STATUSES = [
 
 export const ROLE_LABELS: Record<AppRole, string> = {
   admin: "Admin",
+  user: "User",
   viewer: "Viewer",
 };
 

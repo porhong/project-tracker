@@ -363,9 +363,18 @@ export type Database = {
     }
     Functions: {
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      replace_my_active_sprint_plan: {
+        Args: {
+          p_activity_notes: Json
+          p_allocations: Json
+          p_sprint_id: string
+          p_time_off: Json
+        }
+        Returns: undefined
+      }
     }
     Enums: {
-      app_role: "admin" | "viewer"
+      app_role: "admin" | "user" | "viewer"
       user_status: "active" | "suspended"
     }
     CompositeTypes: {
@@ -494,7 +503,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "viewer"],
+      app_role: ["admin", "user", "viewer"],
       user_status: ["active", "suspended"],
     },
   },
