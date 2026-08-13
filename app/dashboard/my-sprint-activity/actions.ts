@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth/guards";
-import { memberAvailableHours } from "@/lib/sprint-capacity";
 import { createClient } from "@/lib/supabase/server";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -145,7 +144,7 @@ export async function saveMyActiveSprintPlan(
     await Promise.all([
       supabase
         .from("sprints")
-        .select("start_date, end_date, working_days, daily_work_hours, status")
+        .select("start_date, end_date, status")
         .eq("id", sprintId)
         .single(),
       plan.data.allocations.length
@@ -183,17 +182,6 @@ export async function saveMyActiveSprintPlan(
   ) {
     return fail("Time off must fall within the active sprint date range.");
   }
-  const allocatedHours = plan.data.allocations.reduce(
-    (total, allocation) => total + allocation.hours,
-    0,
-  );
-  const availableHours = memberAvailableHours(sprint, plan.data.timeOff);
-  if (Math.round(allocatedHours * 100) !== Math.round(availableHours * 100)) {
-    return fail(
-      `Allocated hours (${allocatedHours}) must exactly match your available sprint hours (${availableHours}).`,
-    );
-  }
-
   const { error } = await supabase.rpc("replace_my_active_sprint_plan", {
     p_sprint_id: sprintId,
     p_allocations: plan.data.allocations,

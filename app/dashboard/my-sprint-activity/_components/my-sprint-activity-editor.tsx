@@ -121,8 +121,8 @@ export function MySprintActivityEditor({
           {matchesAvailableHours
             ? " · Your allocation matches available hours."
             : remainingHours < 0
-              ? ` · Reduce your allocation by ${Math.abs(remainingHours)}h before saving.`
-              : ` · Allocate ${remainingHours}h more before saving.`}
+              ? ` · This exceeds availability by ${Math.abs(remainingHours)}h, but you can still save it.`
+              : ` · ${remainingHours}h remains unallocated; you can still save your activity.`}
         </AlertDescription>
       </Alert>
 
@@ -281,7 +281,7 @@ export function MySprintActivityEditor({
           <AlertDescription>Your sprint activity has been saved.</AlertDescription>
         </Alert>
       ) : null}
-      <Button type="submit" disabled={pending || !matchesAvailableHours}>
+      <Button type="submit" disabled={pending}>
         {pending ? "Saving…" : "Save my sprint activity"}
       </Button>
     </form>

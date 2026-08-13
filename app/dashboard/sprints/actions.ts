@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/guards";
 import { parseReleaseNotes } from "@/lib/release-notes";
-import { memberAvailableHours } from "@/lib/sprint-capacity";
 import { isSprintStatus, type SprintStatus, WEEKDAYS } from "@/lib/sprint-config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -217,7 +216,7 @@ async function loadEditableSprint(id: string) {
 
 async function validatePlanReferences(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  sprint: { project_id: string; start_date: string; end_date: string; working_days: number[]; daily_work_hours: number },
+  sprint: { project_id: string; start_date: string; end_date: string },
   plan: { allocations: AllocationInput[]; timeOff: TimeOffInput[]; notes: ActivityNoteInput[] },
 ) {
   const userIds = [...new Set([...plan.allocations, ...plan.timeOff, ...plan.notes].map((record) => record.user_id))];
@@ -238,17 +237,6 @@ async function validatePlanReferences(
   const activeActivities = new Set((activities ?? []).filter((activity) => activity.is_active).map((activity) => activity.id));
   if (activityIds.some((id) => !activeActivities.has(id))) return "Choose active work activities.";
   if (plan.timeOff.some((record) => record.start_date < sprint.start_date || record.end_date > sprint.end_date)) return "Time off must fall within the sprint date range.";
-  const activeMemberIds = [...validUsers].filter((id) => activeUsers.has(id));
-  for (const memberId of activeMemberIds) {
-    const memberTimeOff = plan.timeOff.filter((record) => record.user_id === memberId);
-    const allocatedHours = plan.allocations
-      .filter((record) => record.user_id === memberId)
-      .reduce((total, record) => total + record.hours, 0);
-    const availableHours = memberAvailableHours(sprint, memberTimeOff);
-    if (Math.round(allocatedHours * 100) !== Math.round(availableHours * 100)) {
-      return `Allocated hours (${allocatedHours}) must exactly match available hours (${availableHours}) for every active project member.`;
-    }
-  }
   return null;
 }
 
