@@ -8,6 +8,7 @@ export type SprintRow = Pick<
   | "version"
   | "name"
   | "description"
+  | "release_notes"
   | "start_date"
   | "end_date"
   | "working_days"

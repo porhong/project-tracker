@@ -11,7 +11,7 @@ export default async function SprintsPage() {
   const supabase = await createClient();
   const [{ data: projects, error: projectsError }, { data: sprints, error: sprintsError }, { data: settings, error: settingsError }] = await Promise.all([
     supabase.from("projects").select("id, name, status").order("name"),
-    supabase.from("sprints").select("id, project_id, sprint_number, version, name, description, start_date, end_date, working_days, daily_work_hours, planned_capacity_hours, status").order("start_date", { ascending: false }),
+    supabase.from("sprints").select("id, project_id, sprint_number, version, name, description, release_notes, start_date, end_date, working_days, daily_work_hours, planned_capacity_hours, status").order("start_date", { ascending: false }),
     supabase.from("workspace_settings").select("working_days, daily_work_hours").eq("id", true).single(),
   ]);
   const error = projectsError ?? sprintsError ?? settingsError;

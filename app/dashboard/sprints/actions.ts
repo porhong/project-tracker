@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/guards";
+import { parseReleaseNotes } from "@/lib/release-notes";
 import { isSprintStatus, type SprintStatus, WEEKDAYS } from "@/lib/sprint-config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -93,6 +94,23 @@ export async function setSprintStatus(id: string, status: SprintStatus): Promise
   if (current.status === "completed") return fail("Completed sprints cannot change status.");
   if (status === "active") { const projectError = await assertActiveProject(current.project_id); if (projectError) return fail(projectError); }
   const { error } = await supabase.from("sprints").update({ status }).eq("id", id);
+  if (error) return databaseError(error.message);
+  revalidate(); return { ok: true };
+}
+
+export async function updateSprintReleaseNotes(_prevState: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return fail("Missing sprint.");
+  const releaseNotes = parseReleaseNotes(formData.get("release_notes"));
+  if ("error" in releaseNotes) return fail(releaseNotes.error);
+
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase.from("sprints").select("status").eq("id", id).single();
+  if (readError || !current) return fail("Sprint not found.");
+  if (current.status === "completed") return fail("Completed sprint release notes are read-only.");
+
+  const { error } = await supabase.from("sprints").update({ release_notes: releaseNotes.data }).eq("id", id);
   if (error) return databaseError(error.message);
   revalidate(); return { ok: true };
 }

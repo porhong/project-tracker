@@ -120,6 +120,7 @@ export type Database = {
           name: string
           planned_capacity_hours: number
           project_id: string
+          release_notes: Json
           sprint_number: number
           start_date: string
           status: string
@@ -135,6 +136,7 @@ export type Database = {
           id?: string
           name: string
           project_id: string
+          release_notes?: Json
           sprint_number: number
           start_date: string
           status?: string
@@ -150,6 +152,7 @@ export type Database = {
           id?: string
           name?: string
           project_id?: string
+          release_notes?: Json
           sprint_number?: number
           start_date?: string
           status?: string
