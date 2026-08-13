@@ -9,6 +9,7 @@ export type CurrentUser = {
   id: string;
   email: string;
   fullName: string | null;
+  avatarPath: string | null;
   role: AppRole;
   status: UserStatus;
   /** Null when resolved from claims alone -- only the profile carries it. */
@@ -33,6 +34,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     id: data.claims.sub,
     email: typeof data.claims.email === "string" ? data.claims.email : "",
     fullName: null,
+    avatarPath: null,
     // A user whose token predates the auth hook carries no role claim. Treat
     // that as the least-privileged role rather than failing open.
     role: role ?? "viewer",
@@ -60,7 +62,7 @@ export const requireProfile = cache(async (): Promise<CurrentUser> => {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("full_name, role, status, created_at")
+    .select("full_name, avatar_path, role, status, created_at")
     .eq("id", user.id)
     .single();
 
@@ -70,6 +72,7 @@ export const requireProfile = cache(async (): Promise<CurrentUser> => {
   return {
     ...user,
     fullName: profile.full_name,
+    avatarPath: profile.avatar_path,
     role: profile.role,
     status: profile.status,
     createdAt: profile.created_at,

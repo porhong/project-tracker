@@ -1,8 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useRef, useState, useTransition } from "react";
+import { UploadIcon } from "lucide-react";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -22,27 +25,68 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { APP_ROLES, ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
+import { AVATAR_ACCEPT, AVATAR_BUCKET, createAvatarPath, validateAvatarFile } from "@/lib/profile/avatar";
+import { createClient } from "@/lib/supabase/client";
 import { createUser, updateUser, type ActionResult } from "../actions";
-import type { UserRow } from "../types";
+import type { UserWithAvatar } from "../types";
 
 type Props = {
   mode: "create" | "edit";
-  user?: UserRow;
+  user?: UserWithAvatar;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
 export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
   const action = mode === "create" ? createUser : updateUser;
-  const [state, formAction, pending] = useActionState<
-    ActionResult | null,
-    FormData
-  >(action, null);
+  const [state, setState] = useState<ActionResult | null>(null);
   const [role, setRole] = useState<AppRole>(user?.role ?? "viewer");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (state?.ok) onOpenChange(false);
-  }, [state, onOpenChange]);
+  const chooseAvatar = (file: File | null) => {
+    if (!file) return;
+    const error = validateAvatarFile(file);
+    if (error) {
+      setState({ ok: false, error });
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setRemoveAvatar(false);
+    setState(null);
+  };
+
+  const submit = (formData: FormData) => {
+    startTransition(async () => {
+      setState(null);
+      if (mode === "edit" && avatarFile && user) {
+        const validationError = validateAvatarFile(avatarFile);
+        if (validationError) {
+          setState({ ok: false, error: validationError });
+          return;
+        }
+        const avatarPath = createAvatarPath(user.id, avatarFile);
+        const { error: uploadError } = await createClient().storage
+          .from(AVATAR_BUCKET)
+          .upload(avatarPath, avatarFile, { contentType: avatarFile.type, upsert: false });
+        if (uploadError) {
+          setState({ ok: false, error: `Could not upload profile photo: ${uploadError.message}` });
+          return;
+        }
+        formData.set("avatar_path", avatarPath);
+      }
+
+      const result = await action(null, formData);
+      setState(result);
+      if (result.ok && !result.warning) onOpenChange(false);
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={(next) => onOpenChange(next)}>
@@ -58,11 +102,59 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="space-y-4">
+        <form action={submit} className="space-y-4">
           {mode === "edit" ? (
             <input type="hidden" name="id" value={user?.id ?? ""} />
           ) : null}
           <input type="hidden" name="role" value={role} />
+          {mode === "edit" ? (
+            <input type="hidden" name="avatar_path" value={user?.avatar_path ?? ""} />
+          ) : null}
+
+          {mode === "edit" && user ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <ProfileAvatar name={user.full_name} email={user.email} url={avatarPreview ?? user.avatarUrl} size="lg" />
+                <div className="space-y-2">
+                  <Label htmlFor={`avatar-${user.id}`}>Profile photo</Label>
+                  <Input
+                    ref={fileInput}
+                    id={`avatar-${user.id}`}
+                    type="file"
+                    accept={AVATAR_ACCEPT}
+                    disabled={pending}
+                    onChange={(event) => chooseAvatar(event.target.files?.[0] ?? null)}
+                  />
+                  <p className="text-xs text-muted-foreground">JPEG, PNG, or WebP; 5 MB maximum.</p>
+                </div>
+              </div>
+              {user.avatar_path ? (
+                <>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      id={`delete-previous-avatar-${user.id}`}
+                      name="delete_previous_avatar"
+                      defaultChecked
+                      disabled={removeAvatar}
+                    />
+                    <Label htmlFor={`delete-previous-avatar-${user.id}`}>
+                      Delete the previous photo when replacing it
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-destructive">
+                    <Checkbox
+                      id={`remove-avatar-${user.id}`}
+                      name="remove_avatar"
+                      checked={removeAvatar}
+                      disabled={pending}
+                      onCheckedChange={setRemoveAvatar}
+                    />
+                    <Label htmlFor={`remove-avatar-${user.id}`}>Remove the current photo</Label>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor="full_name">Full name</Label>
@@ -150,12 +242,16 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
               <AlertDescription>{state.error}</AlertDescription>
             </Alert>
           ) : null}
+          {state?.ok && state.warning ? (
+            <Alert><AlertDescription>{state.warning}</AlertDescription></Alert>
+          ) : null}
 
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
               Cancel
             </DialogClose>
             <Button type="submit" disabled={pending}>
+              {mode === "edit" && avatarFile ? <UploadIcon data-icon="inline-start" /> : null}
               {pending
                 ? "Saving…"
                 : mode === "create"

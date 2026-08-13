@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requireAdmin } from "@/lib/auth/guards";
+import { AVATAR_BUCKET } from "@/lib/profile/avatar";
 import { createClient } from "@/lib/supabase/server";
 import { UserTable } from "./_components/user-table";
 
@@ -16,8 +17,24 @@ export default async function UsersPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, full_name, competency, role, status, created_at")
+    .select("id, email, full_name, competency, role, status, avatar_path, created_at")
     .order("created_at", { ascending: true });
+
+  const avatarPaths = (data ?? [])
+    .map((user) => user.avatar_path)
+    .filter((path): path is string => Boolean(path));
+  const { data: signedAvatars } = avatarPaths.length
+    ? await supabase.storage.from(AVATAR_BUCKET).createSignedUrls(avatarPaths, 60 * 60)
+    : { data: [] };
+  const avatarUrls = new Map(
+    (signedAvatars ?? [])
+      .filter((avatar) => avatar.signedUrl)
+      .map((avatar) => [avatar.path, avatar.signedUrl]),
+  );
+  const users = (data ?? []).map((user) => ({
+    ...user,
+    avatarUrl: user.avatar_path ? (avatarUrls.get(user.avatar_path) ?? null) : null,
+  }));
 
   return (
     <div className="space-y-6">
@@ -34,7 +51,7 @@ export default async function UsersPage() {
           <AlertDescription>Could not load users: {error.message}</AlertDescription>
         </Alert>
       ) : (
-        <UserTable users={data ?? []} currentUserId={me.id} />
+        <UserTable users={users} currentUserId={me.id} />
       )}
     </div>
   );

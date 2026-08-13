@@ -46,6 +46,7 @@ let viewerId = "";
 let userId = "";
 let projectId = "";
 let unassignedProjectId = "";
+const avatarPaths: string[] = [];
 
 try {
   // 1. Public sign-up must be rejected.
@@ -128,6 +129,10 @@ try {
     claims.user_role !== undefined && claims.user_status !== undefined,
     `user_role=${JSON.stringify(claims.user_role)} user_status=${JSON.stringify(claims.user_status)}`,
   );
+  const adminScoped = createClient(url, publishable, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${session.session!.access_token}` } },
+  });
 
   // 5. A User can replace their own plan for an active sprint, but cannot
   // touch another user’s rows or a draft sprint.
@@ -318,6 +323,87 @@ try {
     `rows=${viewerRows?.length}`,
   );
 
+  // 7. Self-service profile fields and private avatar storage stay scoped to
+  // the signed-in user. Use real authenticated requests, not the secret key.
+  const ownAvatarPath = `${userId}/11111111-1111-4111-8111-111111111111.png`;
+  const adminAvatarPath = `${viewerId}/22222222-2222-4222-8222-222222222222.png`;
+  const avatarBody = new Blob(["profile-avatar"], { type: "image/png" });
+  const { error: ownProfileUpdateError } = await userScoped
+    .from("profiles")
+    .update({ full_name: "Updated Verify User", avatar_path: ownAvatarPath })
+    .eq("id", userId)
+    .select();
+  record(
+    "user updates only their own profile fields",
+    !ownProfileUpdateError,
+    ownProfileUpdateError?.message ?? "",
+  );
+  const { data: crossProfileUpdate } = await userScoped
+    .from("profiles")
+    .update({ full_name: "Cross-user write" })
+    .eq("id", viewerId)
+    .select();
+  record(
+    "user cannot update another profile",
+    (crossProfileUpdate?.length ?? 0) === 0,
+    `rows_updated=${crossProfileUpdate?.length ?? 0}`,
+  );
+  const { data: privilegeUpdate } = await userScoped
+    .from("profiles")
+    .update({ role: "admin" })
+    .eq("id", userId)
+    .select();
+  record(
+    "user cannot change protected profile fields",
+    (privilegeUpdate?.length ?? 0) === 0,
+    `rows_updated=${privilegeUpdate?.length ?? 0}`,
+  );
+  const { error: ownAvatarUploadError } = await userScoped.storage
+    .from("avatars")
+    .upload(ownAvatarPath, avatarBody, { contentType: "image/png", upsert: false });
+  if (!ownAvatarUploadError) avatarPaths.push(ownAvatarPath);
+  record(
+    "user uploads an avatar only in their own folder",
+    !ownAvatarUploadError,
+    ownAvatarUploadError?.message ?? "",
+  );
+  const { data: ownAvatarUrl, error: ownAvatarReadError } = await userScoped.storage
+    .from("avatars")
+    .createSignedUrl(ownAvatarPath, 60);
+  record(
+    "user reads their own private avatar",
+    !ownAvatarReadError && Boolean(ownAvatarUrl?.signedUrl),
+    ownAvatarReadError?.message ?? "",
+  );
+  const { error: crossAvatarUploadError } = await userScoped.storage
+    .from("avatars")
+    .upload(`${viewerId}/33333333-3333-4333-8333-333333333333.png`, avatarBody, {
+      contentType: "image/png",
+      upsert: false,
+    });
+  record(
+    "user cannot upload into another avatar folder",
+    Boolean(crossAvatarUploadError),
+    crossAvatarUploadError?.message ?? "upload SUCCEEDED",
+  );
+  const { error: crossAvatarDeleteError } = await viewerScoped.storage
+    .from("avatars")
+    .remove([ownAvatarPath]);
+  record(
+    "user cannot delete another user's avatar",
+    Boolean(crossAvatarDeleteError),
+    crossAvatarDeleteError?.message ?? "delete SUCCEEDED",
+  );
+  const { error: adminAvatarUploadError } = await adminScoped.storage
+    .from("avatars")
+    .upload(adminAvatarPath, avatarBody, { contentType: "image/png", upsert: false });
+  if (!adminAvatarUploadError) avatarPaths.push(adminAvatarPath);
+  record(
+    "admin manages any user's avatar folder",
+    !adminAvatarUploadError,
+    adminAvatarUploadError?.message ?? "",
+  );
+
   const { data: promoted } = await viewerScoped
     .from("profiles")
     .update({ role: "admin" })
@@ -329,7 +415,7 @@ try {
     `rows_updated=${promoted?.length ?? 0}`,
   );
 
-  // 7. Suspension blocks sign-in.
+  // 8. Suspension blocks sign-in.
   await admin.auth.admin.updateUserById(viewerId, { ban_duration: "876000h" });
   await admin.from("profiles").update({ status: "suspended" }).eq("id", viewerId);
   const { error: bannedError } = await anonClient().auth.signInWithPassword({
@@ -342,7 +428,7 @@ try {
     bannedError?.message ?? "sign-in SUCCEEDED while banned",
   );
 
-  // 8. Reactivation restores sign-in.
+  // 9. Reactivation restores sign-in.
   await admin.auth.admin.updateUserById(viewerId, { ban_duration: "none" });
   await admin.from("profiles").update({ status: "active" }).eq("id", viewerId);
   const { error: reactivatedError } = await anonClient().auth.signInWithPassword({
@@ -357,6 +443,9 @@ try {
     errorDetail(error),
   );
 } finally {
+  if (avatarPaths.length) {
+    await admin.storage.from("avatars").remove(avatarPaths);
+  }
   if (projectId) {
     await admin.from("sprints").delete().eq("project_id", projectId);
     await admin.from("projects").delete().eq("id", projectId);

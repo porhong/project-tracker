@@ -10,9 +10,12 @@ import {
   type AppRole,
   type UserStatus,
 } from "@/lib/auth/roles";
+import { AVATAR_BUCKET, isAvatarPathForUser } from "@/lib/profile/avatar";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; warning?: string }
+  | { ok: false; error: string };
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_COMPETENCY_LENGTH = 120;
@@ -23,7 +26,15 @@ function fail(error: string): ActionResult {
 
 function revalidate() {
   revalidatePath("/dashboard/users");
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/profile");
+}
+
+async function deleteStoredAvatar(path: string) {
+  const { error } = await createAdminClient().storage
+    .from(AVATAR_BUCKET)
+    .remove([path]);
+  return error;
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -136,7 +147,7 @@ export async function updateUser(
   const admin = createAdminClient();
   const { data: current, error: readError } = await admin
     .from("profiles")
-    .select("email, role")
+    .select("email, role, avatar_path")
     .eq("id", id)
     .single();
 
@@ -148,6 +159,23 @@ export async function updateUser(
     const blocked = await assertNotLastActiveAdmin(admin, id, "demote");
     if (blocked) return fail(blocked);
   }
+
+  const submittedAvatarPath = formData.get("avatar_path");
+  const removeAvatar = formData.get("remove_avatar") === "on";
+  let avatarPath = current.avatar_path;
+  if (removeAvatar) {
+    avatarPath = null;
+  } else if (
+    typeof submittedAvatarPath === "string" &&
+    submittedAvatarPath &&
+    submittedAvatarPath !== current.avatar_path
+  ) {
+    if (!isAvatarPathForUser(submittedAvatarPath, id)) {
+      return fail("The uploaded profile photo is invalid. Please upload it again.");
+    }
+    avatarPath = submittedAvatarPath;
+  }
+  const replacingAvatar = avatarPath !== current.avatar_path;
 
   const attributes: {
     email?: string;
@@ -179,12 +207,30 @@ export async function updateUser(
       full_name: fullName || null,
       competency: competency || null,
       role: role as AppRole,
+      avatar_path: avatarPath,
     })
     .eq("id", id);
 
-  if (profileError) return fail(profileError.message);
+  if (profileError) {
+    if (replacingAvatar && avatarPath) await deleteStoredAvatar(avatarPath);
+    return fail(profileError.message);
+  }
 
   revalidate();
+  const deletePrevious = formData.get("delete_previous_avatar") === "on";
+  if (
+    replacingAvatar &&
+    current.avatar_path &&
+    (removeAvatar || deletePrevious)
+  ) {
+    const cleanupError = await deleteStoredAvatar(current.avatar_path);
+    if (cleanupError) {
+      return {
+        ok: true,
+        warning: "The user was updated, but the previous profile photo could not be deleted.",
+      };
+    }
+  }
   return { ok: true };
 }
 
@@ -237,6 +283,20 @@ export async function deleteUser(id: string): Promise<ActionResult> {
   const admin = createAdminClient();
   const blocked = await assertNotLastActiveAdmin(admin, id, "delete");
   if (blocked) return fail(blocked);
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("avatar_path")
+    .eq("id", id)
+    .single();
+  if (profileError || !profile) return fail("User not found.");
+
+  // Remove the private object before the profile disappears in the Auth-user
+  // cascade, otherwise there would be no reference left for safe cleanup.
+  if (profile.avatar_path) {
+    const cleanupError = await deleteStoredAvatar(profile.avatar_path);
+    if (cleanupError) return fail("Could not delete the user's profile photo.");
+  }
 
   // The profiles row goes with it via `on delete cascade`.
   const { error } = await admin.auth.admin.deleteUser(id);

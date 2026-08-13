@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -14,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ROLE_LABELS, STATUS_LABELS } from "@/lib/auth/roles";
-import type { UserRow } from "../types";
+import type { UserWithAvatar } from "../types";
 import { UserFormDialog } from "./user-form-dialog";
 import { UserRowActions } from "./user-row-actions";
 
@@ -28,11 +29,11 @@ export function UserTable({
   users,
   currentUserId,
 }: {
-  users: UserRow[];
+  users: UserWithAvatar[];
   currentUserId: string;
 }) {
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<UserRow | null>(null);
+  const [editing, setEditing] = useState<UserWithAvatar | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   return (
@@ -59,7 +60,7 @@ export function UserTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>User</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Competency</TableHead>
               <TableHead>Role</TableHead>
@@ -71,13 +72,16 @@ export function UserTable({
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">
-                  {user.full_name || "—"}
-                  {user.id === currentUserId ? (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      (you)
-                    </span>
-                  ) : null}
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <ProfileAvatar name={user.full_name} email={user.email} url={user.avatarUrl} size="sm" />
+                    <div className="font-medium">
+                      {user.full_name || "—"}
+                      {user.id === currentUserId ? (
+                        <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                      ) : null}
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {user.email}
