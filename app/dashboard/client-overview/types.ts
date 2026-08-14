@@ -18,6 +18,19 @@ export type ClientSprint = {
   status: string;
 };
 
+export type ClientReleaseSprint = {
+  id: string;
+  sprint_number: number;
+  version: string;
+  description: string | null;
+  release_notes: Json;
+  start_date: string;
+  end_date: string;
+  working_days: number[];
+  daily_work_hours: number;
+  status: string;
+};
+
 export type PlannedAllocation = { activity: string; hours: number };
 export type ActivityNote = {
   activity: string;

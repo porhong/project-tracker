@@ -11,13 +11,15 @@ import {
 } from "@/components/ui/card";
 import { requireViewer } from "@/lib/auth/guards";
 import { workingDaysLabel } from "@/lib/sprint-config";
-import { ReleaseNotesEditor } from "../sprints/_components/release-notes-editor";
+import { CalendarIcon, ClockIcon, TrendingUpIcon, UsersIcon } from "lucide-react";
 import { ProjectSwitcher } from "../_components/project-switcher";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewSelector } from "./_components/client-overview-selector";
+import { MemberActivityExplorer } from "./_components/member-activity-explorer";
 import { OverviewTabs } from "./_components/overview-tabs";
+import { ReleaseNotesFeed } from "./_components/release-notes-feed";
 import type {
-  ActivityNote,
+  ClientReleaseSprint,
   ClientSprint,
   ClientSprintProgress,
   PlannedAllocation,
@@ -40,31 +42,11 @@ const dateFormat = new Intl.DateTimeFormat("en", {
   day: "numeric",
 });
 
-const compactDateFormat = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-});
-
 const hours = (value: number) =>
   value.toLocaleString("en", { maximumFractionDigits: 2 });
 
 function formatDate(value: string) {
   return dateFormat.format(new Date(`${value}T00:00:00Z`));
-}
-
-function formatSprintDateRange(startDate: string, endDate: string) {
-  const start = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endDate}T00:00:00Z`);
-  const startLabel = compactDateFormat.format(start);
-  const endLabel = compactDateFormat.format(end);
-
-  if (start.getUTCFullYear() !== end.getUTCFullYear()) {
-    return `${startLabel}, ${start.getUTCFullYear()} – ${endLabel}, ${end.getUTCFullYear()}`;
-  }
-
-  return startLabel === endLabel
-    ? `${startLabel}, ${end.getUTCFullYear()}`
-    : `${startLabel}–${endLabel}, ${end.getUTCFullYear()}`;
 }
 
 function isPlannedAllocation(value: unknown): value is PlannedAllocation {
@@ -78,25 +60,8 @@ function isPlannedAllocation(value: unknown): value is PlannedAllocation {
   );
 }
 
-function isActivityNote(value: unknown): value is ActivityNote {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "activity" in value &&
-    "note" in value &&
-    "updated_at" in value &&
-    typeof value.activity === "string" &&
-    (typeof value.note === "string" || value.note === null) &&
-    typeof value.updated_at === "string"
-  );
-}
-
 function allocations(value: ClientSprintProgress["planned_allocations"]) {
   return Array.isArray(value) ? value.filter(isPlannedAllocation) : [];
-}
-
-function activityNotes(value: ClientSprintProgress["activity_notes"]) {
-  return Array.isArray(value) ? value.filter(isActivityNote) : [];
 }
 
 function sprintStatusVariant(status: string) {
@@ -188,9 +153,21 @@ export async function ClientOverview({
   }
 
   const progressRows = (progressResult.data ?? []) as ClientSprintProgress[];
-  const releaseSprints = (releaseResult.data ?? []).filter((sprint) =>
-    hasReleaseNoteContent(sprint.release_notes),
-  );
+  const releaseSprints: ClientReleaseSprint[] = (releaseResult.data ?? [])
+    .filter((sprint) => hasReleaseNoteContent(sprint.release_notes))
+    .map((sprint) => ({
+      id: sprint.id,
+      sprint_number: sprint.sprint_number,
+      version: sprint.version,
+      description: sprint.description,
+      release_notes: sprint.release_notes,
+      start_date: sprint.start_date,
+      end_date: sprint.end_date,
+      working_days: sprint.working_days,
+      daily_work_hours: Number(sprint.daily_work_hours),
+      status: sprint.status,
+    }));
+
   const schedulesBySprintId = new Map(
     (releaseResult.data ?? []).map((sprint) => [
       sprint.id,
@@ -246,197 +223,126 @@ export async function ClientOverview({
         <ProjectSwitcher projects={projects ?? []} />
       </header>
 
-      <ClientOverviewSelector
-        sprints={visibleSprints}
-        selectedSprintId={selectedSprint?.id ?? null}
-      />
-
       <OverviewTabs
-        activity={<section className="space-y-4" aria-labelledby="sprint-activity-heading">
-        <div className="space-y-1">
-          <h2 id="sprint-activity-heading" className="text-xl font-semibold">
-            Project member activity
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Planned allocation and reported activity for the selected sprint.
-          </p>
-        </div>
+        activity={
+          <section className="space-y-6" aria-labelledby="sprint-activity-heading">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h2 id="sprint-activity-heading" className="text-xl font-semibold">
+                  Project member activity
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Planned allocation and reported activity for the selected sprint.
+                </p>
+              </div>
+              {visibleSprints.length > 0 ? (
+                <ClientOverviewSelector
+                  sprints={visibleSprints}
+                  selectedSprintId={selectedSprint?.id ?? null}
+                />
+              ) : null}
+            </div>
 
-        {!selectedSprint ? (
-          <Alert>
-            <AlertDescription>
-              No active or completed sprint is available for this project yet.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <>
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>Sprint #{selectedSprint.sprint_number}</CardTitle>
-                    <CardDescription>
-                      {selectedSprint.version} · {formatDate(selectedSprint.start_date)} —{" "}
-                      {formatDate(selectedSprint.end_date)}
-                    </CardDescription>
-                  </div>
-                  <Badge variant={sprintStatusVariant(selectedSprint.status)}>
-                    {selectedSprint.status === "active" ? "Active" : "Completed"}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Project members</p>
-                  <p className="text-2xl font-semibold tabular-nums">
-                    {selectedSprintRows.length}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Total activity allocation
-                  </p>
-                  <p className="text-2xl font-semibold tabular-nums">
-                    {hours(plannedHours)}h
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Working days</p>
-                  <p className="font-semibold">
-                    {workingDaysLabel(selectedSprint.working_days)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Hours per work day</p>
-                  <p className="font-semibold tabular-nums">
-                    {hours(selectedSprint.daily_work_hours)}h
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {selectedSprintRows.length ? (
-              <Card>
-                <CardContent className="px-0">
-                  <div className="hidden grid-cols-[minmax(10rem,0.8fr)_minmax(12rem,1fr)_minmax(16rem,1.25fr)] gap-6 border-b px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
-                    <p>Member</p>
-                    <p>Planned activity</p>
-                    <p>Reported activity</p>
-                  </div>
-                  <ul className="divide-y divide-border">
-                    {selectedSprintRows.map((row, index) => {
-                      const memberAllocations = allocations(row.planned_allocations);
-                      const memberNotes = activityNotes(row.activity_notes);
-                      return (
-                        <li
-                          className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(10rem,0.8fr)_minmax(12rem,1fr)_minmax(16rem,1.25fr)] md:gap-6"
-                          key={`${row.sprint_id}-${row.member_name || "member"}-${index}`}
-                        >
-                          <div>
-                            <p className="font-medium">
-                              {row.member_name || "Project member"}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {row.competency || "Project team member"}
-                            </p>
-                          </div>
-                          <div className="space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground md:sr-only">
-                              Planned activity
-                            </p>
-                            {memberAllocations.length ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {memberAllocations.map((allocation) => (
-                                  <Badge key={allocation.activity} variant="outline">
-                                    {allocation.activity} · {hours(allocation.hours)}h
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">—</p>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground md:sr-only">
-                              Reported activity
-                            </p>
-                            {memberNotes.length ? (
-                              <ul className="grid gap-2">
-                                {memberNotes.map((note, noteIndex) => (
-                                  <li
-                                    className="text-sm"
-                                    key={`${note.activity}-${note.updated_at}-${noteIndex}`}
-                                  >
-                                    <span className="font-medium">{note.activity}</span>
-                                    {note.note ? (
-                                      <span className="text-muted-foreground">
-                                        {" · "}{note.note}
-                                      </span>
-                                    ) : null}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">—</p>
-                            )}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </CardContent>
-              </Card>
-            ) : (
+            {!selectedSprint ? (
               <Alert>
                 <AlertDescription>
-                  No project members are available for this sprint.
+                  No active or completed sprint is available for this project yet.
                 </AlertDescription>
               </Alert>
+            ) : (
+              <>
+                <Card>
+                  <CardHeader className="pb-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-lg">
+                          Sprint #{selectedSprint.sprint_number}
+                        </CardTitle>
+                        <CardDescription>
+                          {selectedSprint.version} · {formatDate(selectedSprint.start_date)} —{" "}
+                          {formatDate(selectedSprint.end_date)}
+                        </CardDescription>
+                      </div>
+                      <Badge variant={sprintStatusVariant(selectedSprint.status)}>
+                        {selectedSprint.status === "active" ? "Active sprint" : "Completed sprint"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-0">
+                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                        <UsersIcon className="size-3.5 text-primary" />
+                        <span>Team Members</span>
+                      </div>
+                      <p className="text-2xl font-semibold tabular-nums text-foreground">
+                        {selectedSprintRows.length}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Assigned to sprint
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                        <ClockIcon className="size-3.5 text-primary" />
+                        <span>Total Planned Effort</span>
+                      </div>
+                      <p className="text-2xl font-semibold tabular-nums text-foreground">
+                        {hours(plannedHours)}h
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Across all activities
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                        <CalendarIcon className="size-3.5 text-primary" />
+                        <span>Working Days</span>
+                      </div>
+                      <p className="text-sm font-semibold leading-tight pt-1 text-foreground">
+                        {workingDaysLabel(selectedSprint.working_days)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sprint schedule
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                        <TrendingUpIcon className="size-3.5 text-primary" />
+                        <span>Daily Capacity</span>
+                      </div>
+                      <p className="text-2xl font-semibold tabular-nums text-foreground">
+                        {hours(selectedSprint.daily_work_hours)}h
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Per person / work day
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <MemberActivityExplorer
+                  sprint={selectedSprint}
+                  progressRows={selectedSprintRows}
+                  totalPlannedHours={plannedHours}
+                />
+              </>
             )}
-          </>
-        )}
-        </section>}
+          </section>
+        }
+        releaseNotes={
+          <section className="space-y-6" aria-labelledby="release-notes-heading">
+            <div className="space-y-1">
+              <h2 id="release-notes-heading" className="text-xl font-semibold">
+                Release notes
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Current and completed sprint releases grouped by sprint and version.
+              </p>
+            </div>
 
-        releaseNotes={<section className="space-y-4" aria-labelledby="release-notes-heading">
-        <div className="space-y-1">
-          <h2 id="release-notes-heading" className="text-xl font-semibold">
-            Release notes
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Current and completed sprint releases, most recent first.
-          </p>
-        </div>
-
-        {releaseSprints.length ? (
-          <div className="space-y-6">
-            {releaseSprints.map((sprint) => (
-              <article key={sprint.id} className="space-y-3 border-t pt-6">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold">Sprint #{sprint.sprint_number}</h3>
-                    {sprint.status === "active" ? <Badge>Active</Badge> : null}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {sprint.version} · {formatSprintDateRange(sprint.start_date, sprint.end_date)}
-                  </p>
-                  {sprint.description ? (
-                    <p className="text-sm text-muted-foreground">
-                      {sprint.description}
-                    </p>
-                  ) : null}
-                </div>
-                <ReleaseNotesEditor content={sprint.release_notes} />
-              </article>
-            ))}
-          </div>
-        ) : (
-          <Alert>
-            <AlertDescription>
-              Sprint release notes will appear here once saved.
-            </AlertDescription>
-          </Alert>
-        )}
-        </section>}
+            <ReleaseNotesFeed releases={releaseSprints} />
+          </section>
+        }
       />
     </div>
   );
