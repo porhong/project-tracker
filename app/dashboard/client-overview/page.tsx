@@ -18,6 +18,7 @@ import { ClientOverviewSelector } from "./_components/client-overview-selector";
 import { MemberActivityExplorer } from "./_components/member-activity-explorer";
 import { OverviewTabs } from "./_components/overview-tabs";
 import { ReleaseNotesFeed } from "./_components/release-notes-feed";
+import { SprintTimeline } from "./_components/sprint-timeline";
 import type {
   ClientReleaseSprint,
   ClientSprint,
@@ -168,28 +169,36 @@ export async function ClientOverview({
       status: sprint.status,
     }));
 
-  const schedulesBySprintId = new Map(
-    (releaseResult.data ?? []).map((sprint) => [
-      sprint.id,
-      {
-        working_days: sprint.working_days,
-        daily_work_hours: Number(sprint.daily_work_hours),
-      },
-    ]),
-  );
   const sprintMap = new Map<string, ClientSprint>();
-  for (const row of progressRows) {
-    const schedule = schedulesBySprintId.get(row.sprint_id);
-    sprintMap.set(row.sprint_id, {
-      id: row.sprint_id,
-      sprint_number: row.sprint_number,
-      version: row.version,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      working_days: schedule?.working_days ?? [],
-      daily_work_hours: schedule?.daily_work_hours ?? 0,
-      status: row.sprint_status,
+  for (const sprint of releaseResult.data ?? []) {
+    sprintMap.set(sprint.id, {
+      id: sprint.id,
+      sprint_number: sprint.sprint_number,
+      version: sprint.version,
+      description: sprint.description,
+      release_notes: sprint.release_notes,
+      start_date: sprint.start_date,
+      end_date: sprint.end_date,
+      working_days: sprint.working_days ?? [],
+      daily_work_hours: Number(sprint.daily_work_hours) || 0,
+      status: sprint.status,
     });
+  }
+  for (const row of progressRows) {
+    if (!sprintMap.has(row.sprint_id)) {
+      sprintMap.set(row.sprint_id, {
+        id: row.sprint_id,
+        sprint_number: row.sprint_number,
+        version: row.version,
+        description: null,
+        release_notes: null,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        working_days: [],
+        daily_work_hours: 0,
+        status: row.sprint_status,
+      });
+    }
   }
   const visibleSprints = [...sprintMap.values()];
   const selectedSprint =
@@ -224,6 +233,40 @@ export async function ClientOverview({
       </header>
 
       <OverviewTabs
+        sprintTimeline={
+          <section className="space-y-6" aria-labelledby="sprint-timeline-heading">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h2 id="sprint-timeline-heading" className="text-xl font-semibold">
+                  Sprint timeline &amp; milestones
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Track schedule, current progress, milestones, and team capacity for this sprint period.
+                </p>
+              </div>
+              {visibleSprints.length > 0 ? (
+                <ClientOverviewSelector
+                  sprints={visibleSprints}
+                  selectedSprintId={selectedSprint?.id ?? null}
+                />
+              ) : null}
+            </div>
+
+            {!selectedSprint ? (
+              <Alert>
+                <AlertDescription>
+                  No active or completed sprint is available for this project yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <SprintTimeline
+                sprint={selectedSprint}
+                progressRows={selectedSprintRows}
+                totalPlannedHours={plannedHours}
+              />
+            )}
+          </section>
+        }
         activity={
           <section className="space-y-6" aria-labelledby="sprint-activity-heading">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

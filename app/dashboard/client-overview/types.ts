@@ -11,6 +11,8 @@ export type ClientSprint = {
   id: string;
   sprint_number: number;
   version: string;
+  description?: string | null;
+  release_notes?: Json;
   start_date: string;
   end_date: string;
   working_days: number[];
