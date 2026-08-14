@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { MoreHorizontalIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,11 +35,16 @@ export function UserRowActions({ user, isSelf, onEdit, onError }: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const suspended = user.status === "suspended";
 
-  const run = (work: () => Promise<ActionResult>) => {
+  const run = (work: () => Promise<ActionResult>, successMessage?: string) => {
     startTransition(async () => {
       const result = await work();
-      if (!result.ok) onError(result.error);
-      else setConfirmingDelete(false);
+      if (!result.ok) {
+        toast.error(result.error);
+        onError(result.error);
+      } else {
+        if (successMessage) toast.success(successMessage);
+        setConfirmingDelete(false);
+      }
     });
   };
 
@@ -51,13 +57,15 @@ export function UserRowActions({ user, isSelf, onEdit, onError }: Props) {
           <MoreHorizontalIcon />
           <span className="sr-only">Actions for {user.email}</span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
           <DropdownMenuItem
             disabled={isSelf}
             onClick={() =>
-              run(() =>
-                setUserStatus(user.id, suspended ? "active" : "suspended"),
+              run(
+                () =>
+                  setUserStatus(user.id, suspended ? "active" : "suspended"),
+                suspended ? "User reactivated." : "User suspended.",
               )
             }
           >
@@ -93,7 +101,7 @@ export function UserRowActions({ user, isSelf, onEdit, onError }: Props) {
             <Button
               variant="destructive"
               disabled={pending}
-              onClick={() => run(() => deleteUser(user.id))}
+              onClick={() => run(() => deleteUser(user.id), "User deleted.")}
             >
               {pending ? "Deleting…" : "Delete user"}
             </Button>

@@ -159,8 +159,7 @@ try {
     .insert({
       project_id: projectId,
       sprint_number: 1,
-      version: "verify",
-      name: "Verify active sprint",
+      version: "v1.0",
       start_date: "2026-08-10",
       end_date: "2026-08-21",
       working_days: [1, 2, 3, 4, 5],
@@ -214,8 +213,7 @@ try {
     .insert({
       project_id: projectId,
       sprint_number: 2,
-      version: "verify",
-      name: "Verify draft sprint",
+      version: "v2.0",
       start_date: "2026-08-24",
       end_date: "2026-09-04",
       working_days: [1, 2, 3, 4, 5],
@@ -239,23 +237,19 @@ try {
     Boolean(draftPlanError),
     draftPlanError?.message ?? "write SUCCEEDED",
   );
-  const { error: incompletePlanError } = await userScoped.rpc(
+  const { error: invalidActivityPlanError } = await userScoped.rpc(
     "replace_my_active_sprint_plan",
     {
       p_sprint_id: activeSprint.id,
-      p_allocations: [{ activity_id: activity.id, hours: 1 }],
+      p_allocations: [{ activity_id: "00000000-0000-4000-8000-000000000000", hours: 10 }],
       p_time_off: [],
       p_activity_notes: [],
     },
   );
-  const { data: preservedPlan } = await userScoped
-    .from("sprint_member_allocations")
-    .select("hours")
-    .eq("sprint_id", activeSprint.id);
   record(
-    "user cannot save an allocation below available hours",
-    Boolean(incompletePlanError) && preservedPlan?.[0]?.hours === 72,
-    incompletePlanError?.message ?? `hours=${preservedPlan?.[0]?.hours}`,
+    "user cannot save an allocation with invalid activity",
+    Boolean(invalidActivityPlanError),
+    invalidActivityPlanError?.message ?? "write SUCCEEDED",
   );
 
   // 6. RLS through PostgREST: viewer sees only themselves.
@@ -386,13 +380,13 @@ try {
     Boolean(crossAvatarUploadError),
     crossAvatarUploadError?.message ?? "upload SUCCEEDED",
   );
-  const { error: crossAvatarDeleteError } = await viewerScoped.storage
+  const { data: removedAvatarData, error: crossAvatarDeleteError } = await viewerScoped.storage
     .from("avatars")
     .remove([ownAvatarPath]);
   record(
     "user cannot delete another user's avatar",
-    Boolean(crossAvatarDeleteError),
-    crossAvatarDeleteError?.message ?? "delete SUCCEEDED",
+    Boolean(crossAvatarDeleteError) || (removedAvatarData ?? []).length === 0,
+    crossAvatarDeleteError?.message ?? `removed=${removedAvatarData?.length ?? 0}`,
   );
   const { error: adminAvatarUploadError } = await adminScoped.storage
     .from("avatars")

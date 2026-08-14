@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   ChevronDownIcon,
   FolderKanbanIcon,
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 
 export function DashboardNav({ role }: { role: AppRole }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isAdmin = role === "admin";
   const primaryLinks = [
     { href: "/dashboard", label: "Overview", exact: true },
@@ -40,6 +41,10 @@ export function DashboardNav({ role }: { role: AppRole }) {
   const isActive = (link: { href: string; exact?: boolean }) =>
     link.exact ? pathname === link.href : pathname.startsWith(link.href);
   const managementActive = managementLinks.some((link) => isActive(link));
+  const projectHref = (href: string) => {
+    const projectId = searchParams.get("project");
+    return projectId ? `${href}?project=${encodeURIComponent(projectId)}` : href;
+  };
 
   return (
     <nav aria-label="Dashboard navigation" className="flex items-center gap-1">
@@ -49,7 +54,7 @@ export function DashboardNav({ role }: { role: AppRole }) {
         return (
           <Link
             key={link.href}
-            href={link.href}
+            href={projectHref(link.href)}
             aria-current={active ? "page" : undefined}
             className={cn(
               "rounded-2xl px-3 py-1.5 text-sm transition-colors",
@@ -80,7 +85,11 @@ export function DashboardNav({ role }: { role: AppRole }) {
             <DropdownMenuGroup>
               <DropdownMenuLabel>Workspace</DropdownMenuLabel>
               {managementLinks.slice(0, 2).map((link) => (
-                <ManagementLink key={link.href} link={link} active={isActive(link)} />
+                <ManagementLink
+                  key={link.href}
+                  link={{ ...link, href: projectHref(link.href) }}
+                  active={isActive(link)}
+                />
               ))}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

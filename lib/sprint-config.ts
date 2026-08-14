@@ -8,13 +8,14 @@ export const WEEKDAYS = [
   { value: 7, label: "Sunday", shortLabel: "Sun" },
 ] as const;
 
-export const SPRINT_STATUSES = ["draft", "active", "completed"] as const;
+export const SPRINT_STATUSES = ["draft", "active", "completed", "archived"] as const;
 export type SprintStatus = (typeof SPRINT_STATUSES)[number];
 
 export const SPRINT_STATUS_LABELS: Record<SprintStatus, string> = {
   draft: "Draft",
   active: "Active",
   completed: "Completed",
+  archived: "Archived",
 };
 
 export function isSprintStatus(value: unknown): value is SprintStatus {

@@ -1,6 +1,3 @@
-// Generated. Regenerate after any schema change:
-//   bunx supabase gen types typescript --project-id <ref> > lib/supabase/database.types.ts
-
 export type Json =
   | string
   | number
@@ -10,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.15"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -37,33 +54,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      projects: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          name: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name?: string
-          status?: string
           updated_at?: string
         }
         Relationships: []
@@ -137,62 +127,74 @@ export type Database = {
           },
         ]
       }
-      sprints: {
+      projects: {
         Row: {
           created_at: string
-          daily_work_hours: number
           description: string | null
-          end_date: string
           id: string
           name: string
-          planned_capacity_hours: number
-          project_id: string
-          release_notes: Json
-          sprint_number: number
-          start_date: string
           status: string
           updated_at: string
-          version: string
-          working_days: number[]
         }
         Insert: {
           created_at?: string
-          daily_work_hours: number
           description?: string | null
-          end_date: string
           id?: string
           name: string
-          project_id: string
-          release_notes?: Json
-          sprint_number: number
-          start_date: string
           status?: string
           updated_at?: string
-          version: string
-          working_days: number[]
         }
         Update: {
           created_at?: string
-          daily_work_hours?: number
           description?: string | null
-          end_date?: string
           id?: string
           name?: string
-          project_id?: string
-          release_notes?: Json
-          sprint_number?: number
-          start_date?: string
           status?: string
           updated_at?: string
-          version?: string
-          working_days?: number[]
+        }
+        Relationships: []
+      }
+      sprint_member_activity_notes: {
+        Row: {
+          activity: string
+          created_at: string
+          id: string
+          note: string | null
+          sprint_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          sprint_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          sprint_id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "sprints_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: "sprint_member_activity_notes_sprint_id_fkey"
+            columns: ["sprint_id"]
             isOneToOne: false
-            referencedRelation: "projects"
+            referencedRelation: "sprints"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sprint_member_activity_notes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -249,51 +251,6 @@ export type Database = {
           },
         ]
       }
-      sprint_member_activity_notes: {
-        Row: {
-          activity: string
-          created_at: string
-          id: string
-          note: string | null
-          sprint_id: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          activity: string
-          created_at?: string
-          id?: string
-          note?: string | null
-          sprint_id: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          activity?: string
-          created_at?: string
-          id?: string
-          note?: string | null
-          sprint_id?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sprint_member_activity_notes_sprint_id_fkey"
-            columns: ["sprint_id"]
-            isOneToOne: false
-            referencedRelation: "sprints"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sprint_member_activity_notes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       sprint_member_time_off: {
         Row: {
           created_at: string
@@ -339,6 +296,65 @@ export type Database = {
           },
         ]
       }
+      sprints: {
+        Row: {
+          created_at: string
+          daily_work_hours: number
+          description: string | null
+          end_date: string
+          id: string
+          planned_capacity_hours: number | null
+          project_id: string
+          release_notes: Json
+          sprint_number: number
+          start_date: string
+          status: string
+          updated_at: string
+          version: string
+          working_days: number[]
+        }
+        Insert: {
+          created_at?: string
+          daily_work_hours: number
+          description?: string | null
+          end_date: string
+          id?: string
+          planned_capacity_hours?: number | null
+          project_id: string
+          release_notes?: Json
+          sprint_number: number
+          start_date: string
+          status?: string
+          updated_at?: string
+          version: string
+          working_days: number[]
+        }
+        Update: {
+          created_at?: string
+          daily_work_hours?: number
+          description?: string | null
+          end_date?: string
+          id?: string
+          planned_capacity_hours?: number | null
+          project_id?: string
+          release_notes?: Json
+          sprint_number?: number
+          start_date?: string
+          status?: string
+          updated_at?: string
+          version?: string
+          working_days?: number[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sprints_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_settings: {
         Row: {
           daily_work_hours: number
@@ -371,14 +387,13 @@ export type Database = {
         Returns: {
           activity_notes: Json
           competency: string
+          end_date: string
           member_name: string
           planned_allocations: Json
           sprint_id: string
-          sprint_name: string
           sprint_number: number
           sprint_status: string
           start_date: string
-          end_date: string
           version: string
         }[]
       }
@@ -402,7 +417,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user" | "viewer"
+      app_role: "admin" | "viewer" | "user"
       user_status: "active" | "suspended"
     }
     CompositeTypes: {
@@ -529,10 +544,14 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
-      app_role: ["admin", "user", "viewer"],
+      app_role: ["admin", "viewer", "user"],
       user_status: ["active", "suspended"],
     },
   },
 } as const
+

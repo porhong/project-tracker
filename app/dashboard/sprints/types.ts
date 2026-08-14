@@ -6,7 +6,6 @@ export type SprintRow = Pick<
   | "project_id"
   | "sprint_number"
   | "version"
-  | "name"
   | "description"
   | "release_notes"
   | "start_date"

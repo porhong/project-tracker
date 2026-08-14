@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { MoreHorizontalIcon, PlusIcon, UserPlusIcon, XIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,8 +68,13 @@ function ProjectFormDialog({ mode, project, open, onOpenChange }: DialogProps) {
   );
 
   useEffect(() => {
-    if (state?.ok) onOpenChange(false);
-  }, [state, onOpenChange]);
+    if (state?.ok) {
+      toast.success(mode === "create" ? "Project created successfully." : "Project updated successfully.");
+      onOpenChange(false);
+    } else if (state && !state.ok) {
+      toast.error(state.error);
+    }
+  }, [state, onOpenChange, mode]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -138,6 +144,14 @@ function ProjectMembersDialog({
   const [removalError, setRemovalError] = useState<string | null>(null);
   const [isRemoving, startTransition] = useTransition();
 
+  useEffect(() => {
+    if (state?.ok) {
+      toast.success("User assigned to project.");
+    } else if (state && !state.ok) {
+      toast.error(state.error);
+    }
+  }, [state]);
+
   const memberIds = useMemo(
     () => new Set(members.filter((member) => member.project_id === project.id).map((member) => member.user_id)),
     [members, project.id],
@@ -149,7 +163,12 @@ function ProjectMembersDialog({
     setRemovalError(null);
     startTransition(async () => {
       const result = await removeProjectMember(project.id, userId);
-      if (!result.ok) setRemovalError(result.error);
+      if (!result.ok) {
+        toast.error(result.error);
+        setRemovalError(result.error);
+      } else {
+        toast.success("User removed from project.");
+      }
     });
   };
 
@@ -272,8 +291,13 @@ export function ProjectManager({
     if (!archiving) return;
     startTransition(async () => {
       const result = await archiveProject(archiving.id);
-      if (result.ok) setArchiving(null);
-      else setError(result.error);
+      if (result.ok) {
+        toast.success(`Project ${archiving.name} archived.`);
+        setArchiving(null);
+      } else {
+        toast.error(result.error);
+        setError(result.error);
+      }
     });
   };
 
@@ -302,7 +326,7 @@ export function ProjectManager({
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}><MoreHorizontalIcon /><span className="sr-only">Actions for {project.name}</span></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="w-44">
                       <DropdownMenuItem onClick={() => setManagingMembers(project)}>Manage members</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setEditing(project)}>Edit</DropdownMenuItem>
                       {project.status === "active" ? <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => setArchiving(project)}>Archive</DropdownMenuItem></> : null}

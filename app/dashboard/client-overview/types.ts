@@ -11,7 +11,6 @@ export type ClientSprint = {
   id: string;
   sprint_number: number;
   version: string;
-  name: string;
   start_date: string;
   end_date: string;
   working_days: number[];
@@ -30,7 +29,6 @@ export type ClientSprintProgress = {
   sprint_id: string;
   sprint_number: number;
   version: string;
-  sprint_name: string;
   start_date: string;
   end_date: string;
   sprint_status: string;

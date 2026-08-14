@@ -12,6 +12,7 @@ import {
 import { requireViewer } from "@/lib/auth/guards";
 import { workingDaysLabel } from "@/lib/sprint-config";
 import { ReleaseNotesEditor } from "../sprints/_components/release-notes-editor";
+import { ProjectSwitcher } from "../_components/project-switcher";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewSelector } from "./_components/client-overview-selector";
 import { OverviewTabs } from "./_components/overview-tabs";
@@ -165,7 +166,7 @@ export async function ClientOverview({
     supabase
       .from("sprints")
       .select(
-        "id, sprint_number, version, name, description, release_notes, start_date, end_date, working_days, daily_work_hours, status",
+        "id, sprint_number, version, description, release_notes, start_date, end_date, working_days, daily_work_hours, status",
       )
       .eq("project_id", selectedProject.id)
       .in("status", ["active", "completed"])
@@ -206,7 +207,6 @@ export async function ClientOverview({
       id: row.sprint_id,
       sprint_number: row.sprint_number,
       version: row.version,
-      name: row.sprint_name,
       start_date: row.start_date,
       end_date: row.end_date,
       working_days: schedule?.working_days ?? [],
@@ -230,22 +230,23 @@ export async function ClientOverview({
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold">Client overview</h1>
-          <Badge variant={selectedProject.status === "active" ? "default" : "secondary"}>
-            {selectedProject.status === "active" ? "Active project" : "Archived project"}
-          </Badge>
+      <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="max-w-2xl space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold">Client overview</h1>
+            <Badge variant={selectedProject.status === "active" ? "default" : "secondary"}>
+              {selectedProject.status === "active" ? "Active project" : "Archived project"}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {selectedProject.description ||
+              "Follow project releases and the team’s sprint activity."}
+          </p>
         </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          {selectedProject.description ||
-            "Follow project releases and the team’s sprint activity."}
-        </p>
+        <ProjectSwitcher projects={projects ?? []} />
       </header>
 
       <ClientOverviewSelector
-        projects={projects ?? []}
-        selectedProjectId={selectedProject.id}
         sprints={visibleSprints}
         selectedSprintId={selectedSprint?.id ?? null}
       />
@@ -273,7 +274,7 @@ export async function ClientOverview({
               <CardHeader>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <CardTitle>{selectedSprint.name}</CardTitle>
+                    <CardTitle>Sprint #{selectedSprint.sprint_number}</CardTitle>
                     <CardDescription>
                       {selectedSprint.version} · {formatDate(selectedSprint.start_date)} —{" "}
                       {formatDate(selectedSprint.end_date)}
@@ -412,7 +413,7 @@ export async function ClientOverview({
               <article key={sprint.id} className="space-y-3 border-t pt-6">
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold">{sprint.name}</h3>
+                    <h3 className="text-lg font-semibold">Sprint #{sprint.sprint_number}</h3>
                     {sprint.status === "active" ? <Badge>Active</Badge> : null}
                   </div>
                   <p className="text-sm text-muted-foreground">

@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { readRoleClaims, type AppRole, type UserStatus } from "./roles";
 
@@ -100,4 +101,41 @@ export async function requireViewer(): Promise<CurrentUser> {
   const user = await requireProfile();
   if (user.role !== "viewer") redirect("/dashboard?error=forbidden");
   return user;
+}
+
+/**
+ * Verifies the current admin's password for sensitive operations (e.g. archiving or deleting).
+ * Uses an isolated client without persisting session cookies so it doesn't disrupt active sessions.
+ */
+export async function verifyCurrentAdminPassword(
+  password: string,
+): Promise<{ ok: true; user: CurrentUser } | { ok: false; error: string }> {
+  const user = await requireAdmin();
+  const trimmed = String(password ?? "").trim();
+  if (!trimmed) {
+    return { ok: false, error: "Password is required to confirm this action." };
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !publishableKey) {
+    return { ok: false, error: "Authentication service is not configured." };
+  }
+
+  const authClient = createSupabaseClient(supabaseUrl, publishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data, error } = await authClient.auth.signInWithPassword({
+    email: user.email,
+    password: trimmed,
+  });
+
+  if (error || !data.user) {
+    return { ok: false, error: "Incorrect password. Please try again." };
+  }
+
+  return { ok: true, user };
 }

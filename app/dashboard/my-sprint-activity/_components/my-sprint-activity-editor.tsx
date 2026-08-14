@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,14 @@ export function MySprintActivityEditor({
     saveMyActiveSprintPlan,
     null,
   );
+
+  useEffect(() => {
+    if (state?.ok) {
+      toast.success("Sprint activity saved.");
+    } else if (state && !state.ok) {
+      toast.error(state.error);
+    }
+  }, [state]);
   const [allocationValues, setAllocationValues] = useState<Record<string, string>>(
     () =>
       Object.fromEntries(

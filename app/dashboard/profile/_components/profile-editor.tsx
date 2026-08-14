@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { Trash2Icon, UploadIcon } from "lucide-react";
+import { toast } from "sonner";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
     if (!file) return;
     const error = validateAvatarFile(file);
     if (error) {
+      toast.error(error);
       setMessage({ error });
       if (fileInput.current) fileInput.current.value = "";
       return;
@@ -60,6 +62,7 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
       if (selectedFile) {
         const validationError = validateAvatarFile(selectedFile);
         if (validationError) {
+          toast.error(validationError);
           setMessage({ error: validationError });
           return;
         }
@@ -71,15 +74,20 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
             upsert: false,
           });
         if (uploadError) {
-          setMessage({ error: `Could not upload profile photo: ${uploadError.message}` });
+          const msg = `Could not upload profile photo: ${uploadError.message}`;
+          toast.error(msg);
+          setMessage({ error: msg });
           return;
         }
         formData.set("avatar_path", avatarPath);
       }
 
       const result = await updateMyProfile(formData);
-      if (!result.ok) setMessage({ error: result.error });
-      else {
+      if (!result.ok) {
+        toast.error(result.error);
+        setMessage({ error: result.error });
+      } else {
+        toast.success("Profile saved.");
         setSelectedFile(null);
         setMessage(result.warning ? { warning: result.warning } : null);
       }
@@ -90,8 +98,13 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
     startTransition(async () => {
       const result = await removeMyAvatar();
       setConfirmingRemoval(false);
-      if (!result.ok) setMessage({ error: result.error });
-      else setMessage(result.warning ? { warning: result.warning } : null);
+      if (!result.ok) {
+        toast.error(result.error);
+        setMessage({ error: result.error });
+      } else {
+        toast.success("Profile photo removed.");
+        setMessage(result.warning ? { warning: result.warning } : null);
+      }
     });
   };
 

@@ -10,18 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ClientProject, ClientSprint } from "../types";
+import type { ClientSprint } from "../types";
 
 type ClientOverviewSelectorProps = {
-  projects: ClientProject[];
-  selectedProjectId: string;
   sprints: ClientSprint[];
   selectedSprintId: string | null;
 };
 
 export function ClientOverviewSelector({
-  projects,
-  selectedProjectId,
   sprints,
   selectedSprintId,
 }: ClientOverviewSelectorProps) {
@@ -30,61 +26,36 @@ export function ClientOverviewSelector({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const updateSelection = (projectId: string, sprintId?: string | null) => {
+  const updateSelection = (sprintId?: string | null) => {
     const params = new URLSearchParams(searchParams);
-    params.set("project", projectId);
     if (sprintId) params.set("sprint", sprintId);
     else params.delete("sprint");
     startTransition(() => router.replace(`${pathname}?${params.toString()}`));
   };
 
   return (
-    <div className="grid gap-4 rounded-2xl border bg-muted/40 p-4 sm:grid-cols-2">
-      <div className="space-y-2">
-        <Label htmlFor="client-project">Project</Label>
-        <Select
-          value={selectedProjectId}
-          disabled={isPending}
-          onValueChange={(value) => value && updateSelection(value)}
-        >
-          <SelectTrigger id="client-project" className="w-full">
-            <SelectValue>
-              {(value) =>
-                projects.find((project) => project.id === value)?.name ??
-                "Select project"
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {projects.map((project) => (
-              <SelectItem key={project.id} value={project.id}>
-                {project.name}
-                {project.status === "archived" ? " (archived)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
+    <div className="rounded-2xl border bg-muted/40 p-4">
+      <div className="max-w-sm space-y-2">
         <Label htmlFor="client-sprint">Sprint</Label>
         <Select
           value={selectedSprintId ?? undefined}
           disabled={isPending || sprints.length === 0}
-          onValueChange={(value) => updateSelection(selectedProjectId, value)}
+          onValueChange={(value) => updateSelection(value)}
         >
           <SelectTrigger id="client-sprint" className="w-full">
             <SelectValue>
               {(value) => {
                 const sprint = sprints.find((item) => item.id === value);
-                return sprint?.name ?? "No visible sprint";
+                return sprint
+                  ? `Sprint #${sprint.sprint_number} · ${sprint.version}`
+                  : "No visible sprint";
               }}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {sprints.map((sprint) => (
               <SelectItem key={sprint.id} value={sprint.id}>
-                {sprint.name}
+                Sprint #{sprint.sprint_number} · {sprint.version}
               </SelectItem>
             ))}
           </SelectContent>

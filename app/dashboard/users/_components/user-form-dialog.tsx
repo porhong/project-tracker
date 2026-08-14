@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { UploadIcon } from "lucide-react";
+import { toast } from "sonner";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
     if (!file) return;
     const error = validateAvatarFile(file);
     if (error) {
+      toast.error(error);
       setState({ ok: false, error });
       if (fileInput.current) fileInput.current.value = "";
       return;
@@ -68,6 +70,7 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
       if (mode === "edit" && avatarFile && user) {
         const validationError = validateAvatarFile(avatarFile);
         if (validationError) {
+          toast.error(validationError);
           setState({ ok: false, error: validationError });
           return;
         }
@@ -76,7 +79,9 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
           .from(AVATAR_BUCKET)
           .upload(avatarPath, avatarFile, { contentType: avatarFile.type, upsert: false });
         if (uploadError) {
-          setState({ ok: false, error: `Could not upload profile photo: ${uploadError.message}` });
+          const msg = `Could not upload profile photo: ${uploadError.message}`;
+          toast.error(msg);
+          setState({ ok: false, error: msg });
           return;
         }
         formData.set("avatar_path", avatarPath);
@@ -84,7 +89,12 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
 
       const result = await action(null, formData);
       setState(result);
-      if (result.ok && !result.warning) onOpenChange(false);
+      if (result.ok && !result.warning) {
+        toast.success(mode === "create" ? "User created successfully." : "User updated successfully.");
+        onOpenChange(false);
+      } else if (!result.ok) {
+        toast.error(result.error);
+      }
     });
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,12 @@ const initialState: LoginState = { error: null };
 
 export function LoginForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(signIn, initialState);
+
+  useEffect(() => {
+    if (state.error) {
+      toast.error(state.error);
+    }
+  }, [state.error]);
 
   return (
     <form action={formAction} className="space-y-4">

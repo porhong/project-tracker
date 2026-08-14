@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,11 +18,18 @@ type ReleaseNotesDialogProps = {
 };
 
 export function ReleaseNotesDialog({ sprint, open, onOpenChange }: ReleaseNotesDialogProps) {
-  const readonly = sprint.status === "completed";
+  const readonly = sprint.status === "completed" || sprint.status === "archived";
   const [content, setContent] = useState<Json>(sprint.release_notes ?? EMPTY_RELEASE_NOTES);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(updateSprintReleaseNotes, null);
 
-  useEffect(() => { if (state?.ok) onOpenChange(false); }, [state, onOpenChange]);
+  useEffect(() => {
+    if (state?.ok) {
+      toast.success("Release notes saved.");
+      onOpenChange(false);
+    } else if (state && !state.ok) {
+      toast.error(state.error);
+    }
+  }, [state, onOpenChange]);
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Release notes · {sprint.name}</DialogTitle><DialogDescription>{readonly ? "Completed sprint release notes are preserved as read-only." : "Summarize changes, highlights, and known limitations for this sprint."}</DialogDescription></DialogHeader>{readonly ? <ReleaseNotesEditor content={content} /> : <form action={formAction} className="space-y-4"><input type="hidden" name="id" value={sprint.id} /><input type="hidden" name="release_notes" value={JSON.stringify(content)} /><ReleaseNotesEditor content={content} editable onChange={setContent} />{state && !state.ok ? <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert> : null}<DialogFooter><DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose><Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save release notes"}</Button></DialogFooter></form>}</DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Release notes · Sprint #{sprint.sprint_number}</DialogTitle><DialogDescription>{readonly ? "Completed and archived sprint release notes are preserved as read-only." : "Summarize changes, highlights, and known limitations for this sprint."}</DialogDescription></DialogHeader>{readonly ? <ReleaseNotesEditor content={content} /> : <form action={formAction} className="space-y-4"><input type="hidden" name="id" value={sprint.id} /><input type="hidden" name="release_notes" value={JSON.stringify(content)} /><ReleaseNotesEditor content={content} editable onChange={setContent} />{state && !state.ok ? <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert> : null}<DialogFooter><DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose><Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save release notes"}</Button></DialogFooter></form>}</DialogContent></Dialog>;
 }

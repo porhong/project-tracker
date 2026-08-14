@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/guards";
+import { requireAdmin, verifyCurrentAdminPassword } from "@/lib/auth/guards";
 import { parseReleaseNotes } from "@/lib/release-notes";
 import { isSprintStatus, type SprintStatus, WEEKDAYS } from "@/lib/sprint-config";
 import { createClient } from "@/lib/supabase/server";
@@ -31,7 +31,6 @@ function sprintInput(formData: FormData) {
   const projectId = String(formData.get("project_id") ?? "");
   const sprintNumber = Number(formData.get("sprint_number"));
   const version = String(formData.get("version") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const startDate = String(formData.get("start_date") ?? "");
   const endDate = String(formData.get("end_date") ?? "");
@@ -40,14 +39,13 @@ function sprintInput(formData: FormData) {
 
   if (!projectId) return { error: "Select a project." } as const;
   if (!Number.isInteger(sprintNumber) || sprintNumber <= 0) return { error: "Sprint number must be a positive whole number." } as const;
-  if (!version || version.length > 80) return { error: "Version is required and must be at most 80 characters." } as const;
-  if (!name || name.length > 160) return { error: "Sprint name is required and must be at most 160 characters." } as const;
+  if (!/^v\S.*$/.test(version) || version.length > 80) return { error: "Version is required, must start with v, and be at most 80 characters." } as const;
   if (description.length > 2_000) return { error: "Description must be at most 2,000 characters." } as const;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate) return { error: "Choose a valid date range." } as const;
   if (!workingDays?.length) return { error: "Choose at least one working day." } as const;
   if (!Number.isFinite(dailyWorkHours) || dailyWorkHours <= 0 || dailyWorkHours > 24) return { error: "Daily work hours must be greater than 0 and at most 24." } as const;
 
-  return { data: { project_id: projectId, sprint_number: sprintNumber, version, name, description: description || null, start_date: startDate, end_date: endDate, working_days: workingDays, daily_work_hours: dailyWorkHours } } as const;
+  return { data: { project_id: projectId, sprint_number: sprintNumber, version, description: description || null, start_date: startDate, end_date: endDate, working_days: workingDays, daily_work_hours: dailyWorkHours } } as const;
 }
 
 function databaseError(message: string): ActionResult {
@@ -80,9 +78,8 @@ export async function updateSprint(_prevState: ActionResult | null, formData: Fo
   const supabase = await createClient();
   const { data: current, error: readError } = await supabase.from("sprints").select("project_id, status").eq("id", id).single();
   if (readError || !current) return fail("Sprint not found.");
-  if (current.status === "completed") return fail("Completed sprints are read-only.");
-  if (current.status !== "draft" && current.project_id !== input.data.project_id) return fail("Only draft sprints can move between projects.");
-  if (current.project_id !== input.data.project_id) { const projectError = await assertActiveProject(input.data.project_id); if (projectError) return fail(projectError); }
+  if (current.status === "completed" || current.status === "archived") return fail("Completed or archived sprints are read-only.");
+  if (current.project_id !== input.data.project_id) return fail("Sprints cannot move between projects.");
   const { error } = await supabase.from("sprints").update(input.data).eq("id", id);
   if (error) return databaseError(error.message);
   revalidate(); return { ok: true };
@@ -96,9 +93,49 @@ export async function setSprintStatus(id: string, status: SprintStatus): Promise
   if (readError || !current) return fail("Sprint not found.");
   if (current.status === "draft" && status !== "active") return fail("Draft sprints can only be activated.");
   if (current.status === "active" && status !== "completed") return fail("Active sprints can only be completed.");
-  if (current.status === "completed") return fail("Completed sprints cannot change status.");
+  if (current.status === "completed" || current.status === "archived") return fail("Completed or archived sprints cannot change status directly.");
   if (status === "active") { const projectError = await assertActiveProject(current.project_id); if (projectError) return fail(projectError); }
   const { error } = await supabase.from("sprints").update({ status }).eq("id", id);
+  if (error) return databaseError(error.message);
+  revalidate(); return { ok: true };
+}
+
+export async function reenableSprint(id: string, password: string): Promise<ActionResult> {
+  const auth = await verifyCurrentAdminPassword(password);
+  if (!auth.ok) return fail(auth.error);
+  if (!id) return fail("Missing sprint.");
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase.from("sprints").select("status, project_id").eq("id", id).single();
+  if (readError || !current) return fail("Sprint not found.");
+  if (current.status !== "completed") return fail("Only completed sprints can be re-enabled.");
+  const projectError = await assertActiveProject(current.project_id);
+  if (projectError) return fail(projectError);
+  const { error } = await supabase.from("sprints").update({ status: "active" }).eq("id", id);
+  if (error) return databaseError(error.message);
+  revalidate(); return { ok: true };
+}
+
+export async function archiveSprint(id: string, password: string): Promise<ActionResult> {
+  const auth = await verifyCurrentAdminPassword(password);
+  if (!auth.ok) return fail(auth.error);
+  if (!id) return fail("Missing sprint.");
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase.from("sprints").select("status").eq("id", id).single();
+  if (readError || !current) return fail("Sprint not found.");
+  if (current.status === "archived") return fail("Sprint is already archived.");
+  const { error } = await supabase.from("sprints").update({ status: "archived" }).eq("id", id);
+  if (error) return databaseError(error.message);
+  revalidate(); return { ok: true };
+}
+
+export async function unarchiveSprint(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!id) return fail("Missing sprint.");
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase.from("sprints").select("status").eq("id", id).single();
+  if (readError || !current) return fail("Sprint not found.");
+  if (current.status !== "archived") return fail("Sprint is not archived.");
+  const { error } = await supabase.from("sprints").update({ status: "draft" }).eq("id", id);
   if (error) return databaseError(error.message);
   revalidate(); return { ok: true };
 }
@@ -113,20 +150,20 @@ export async function updateSprintReleaseNotes(_prevState: ActionResult | null, 
   const supabase = await createClient();
   const { data: current, error: readError } = await supabase.from("sprints").select("status").eq("id", id).single();
   if (readError || !current) return fail("Sprint not found.");
-  if (current.status === "completed") return fail("Completed sprint release notes are read-only.");
+  if (current.status === "completed" || current.status === "archived") return fail("Completed or archived sprint release notes are read-only.");
 
   const { error } = await supabase.from("sprints").update({ release_notes: releaseNotes.data }).eq("id", id);
   if (error) return databaseError(error.message);
   revalidate(); return { ok: true };
 }
 
-export async function deleteSprint(id: string): Promise<ActionResult> {
-  await requireAdmin();
+export async function deleteSprint(id: string, password: string): Promise<ActionResult> {
+  const auth = await verifyCurrentAdminPassword(password);
+  if (!auth.ok) return fail(auth.error);
   if (!id) return fail("Missing sprint.");
   const supabase = await createClient();
   const { data: current, error: readError } = await supabase.from("sprints").select("status").eq("id", id).single();
   if (readError || !current) return fail("Sprint not found.");
-  if (current.status !== "draft") return fail("Only draft sprints can be deleted.");
   const { error } = await supabase.from("sprints").delete().eq("id", id);
   if (error) return fail(error.message);
   revalidate(); return { ok: true };
@@ -210,7 +247,7 @@ async function loadEditableSprint(id: string) {
     .eq("id", id)
     .single();
   if (error || !data) return { error: "Sprint not found." } as const;
-  if (data.status === "completed") return { error: "Completed sprint plans are read-only." } as const;
+  if (data.status === "completed" || data.status === "archived") return { error: "Completed or archived sprint plans are read-only." } as const;
   return { data, supabase } as const;
 }
 

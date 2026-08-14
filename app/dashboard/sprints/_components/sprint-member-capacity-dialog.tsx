@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,7 +52,14 @@ export function SprintMemberCapacityDialog({
   });
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveSprintMemberPlan, null);
 
-  useEffect(() => { if (state?.ok) onOpenChange(false); }, [onOpenChange, state]);
+  useEffect(() => {
+    if (state?.ok) {
+      toast.success("Member capacity plan saved.");
+      onOpenChange(false);
+    } else if (state && !state.ok) {
+      toast.error(state.error);
+    }
+  }, [onOpenChange, state]);
 
   const payload = useMemo(() => ({
     allocations: Object.entries(allocationValues).flatMap(([key, value]) => {
@@ -71,7 +79,7 @@ export function SprintMemberCapacityDialog({
   const updateNote = (userId: string, index: number, field: keyof ActivityNoteDraft, value: string) => setNotesValues((current) => ({ ...current, [userId]: (current[userId] ?? []).map((note, noteIndex) => noteIndex === index ? { ...note, [field]: value } : note) }));
   const addNote = (userId: string) => setNotesValues((current) => ({ ...current, [userId]: [...(current[userId] ?? []), { activity: "", note: "" }] }));
   const removeNote = (userId: string, index: number) => setNotesValues((current) => ({ ...current, [userId]: (current[userId] ?? []).filter((_, noteIndex) => noteIndex !== index) }));
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-5xl"><DialogHeader><DialogTitle>Member capacity · {sprint.name}</DialogTitle><DialogDescription>Record each member’s planned sprint hours and work activity in one place. Allocations may be saved before they match available hours.</DialogDescription></DialogHeader><form action={formAction} className="space-y-5"><input type="hidden" name="id" value={sprint.id} /><input type="hidden" name="allocations" value={JSON.stringify(payload.allocations)} /><input type="hidden" name="time_off" value={JSON.stringify(payload.timeOff)} /><input type="hidden" name="activity_notes" value={JSON.stringify(payload.notes)} />{members.length === 0 ? <Alert><AlertDescription>Add active members to this project before creating its sprint capacity plan.</AlertDescription></Alert> : members.map((member) => {
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-5xl"><DialogHeader><DialogTitle>Member capacity · Sprint #{sprint.sprint_number}</DialogTitle><DialogDescription>Record each member’s planned sprint hours and work activity in one place. Allocations may be saved before they match available hours.</DialogDescription></DialogHeader><form action={formAction} className="space-y-5"><input type="hidden" name="id" value={sprint.id} /><input type="hidden" name="allocations" value={JSON.stringify(payload.allocations)} /><input type="hidden" name="time_off" value={JSON.stringify(payload.timeOff)} /><input type="hidden" name="activity_notes" value={JSON.stringify(payload.notes)} />{members.length === 0 ? <Alert><AlertDescription>Add active members to this project before creating its sprint capacity plan.</AlertDescription></Alert> : members.map((member) => {
     const memberTimeOff = timeOffValues[member.id] ?? [];
     const memberNotes = notesValues[member.id] ?? [];
     const availableDays = countAvailableSprintDays(sprint, memberTimeOff);

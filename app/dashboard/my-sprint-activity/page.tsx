@@ -12,6 +12,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { requireProfile } from "@/lib/auth/guards";
 import { countAvailableSprintDays, memberAvailableHours } from "@/lib/sprint-capacity";
+import { SPRINT_STATUS_LABELS } from "@/lib/sprint-config";
 import { createClient } from "@/lib/supabase/server";
 import { MySprintActivityEditor } from "./_components/my-sprint-activity-editor";
 
@@ -22,44 +23,57 @@ export const metadata: Metadata = {
 const hours = (value: number) =>
   value.toLocaleString("en", { maximumFractionDigits: 2 });
 
-export default async function MySprintActivityPage() {
+type MySprintActivityPageProps = {
+  searchParams: Promise<{ project?: string | string[] }>;
+};
+
+export default async function MySprintActivityPage({
+  searchParams,
+}: MySprintActivityPageProps) {
   const user = await requireProfile();
   if (user.role === "viewer") redirect("/dashboard?error=forbidden");
+  const params = await searchParams;
+  const requestedProjectId =
+    typeof params.project === "string" ? params.project : undefined;
   const supabase = await createClient();
   const sprintStatuses = user.role === "user" ? ["active"] : ["draft", "active"];
+  const { data: projects, error: projectsError } = await supabase
+    .from("projects")
+    .select("id, name")
+    .order("name");
+  const selectedProject =
+    projects?.find((project) => project.id === requestedProjectId) ?? projects?.[0];
+
+  if (projectsError) {
+    return <Alert variant="destructive"><AlertDescription>Could not load your projects: {projectsError.message}</AlertDescription></Alert>;
+  }
+
+  if (!selectedProject) {
+    return <div className="space-y-6"><header className="space-y-1"><h1 className="text-2xl font-semibold">My sprint activity</h1><p className="text-sm text-muted-foreground">Manage your own activity, availability, and allocation for active sprints.</p></header><Alert><AlertDescription>You are not currently assigned to a project.</AlertDescription></Alert></div>;
+  }
+
+  const { data: sprints, error: sprintsError } = await supabase
+    .from("sprints")
+    .select(
+      "id, project_id, sprint_number, start_date, end_date, working_days, daily_work_hours, status",
+    )
+    .eq("project_id", selectedProject.id)
+    .in("status", sprintStatuses)
+    .order("start_date", { ascending: false });
+  const sprintIds = (sprints ?? []).map((sprint) => sprint.id);
   const [
-    { data: sprints, error: sprintsError },
-    { data: projects, error: projectsError },
     { data: allocations, error: allocationsError },
     { data: timeOff, error: timeOffError },
     { data: activities, error: activitiesError },
     { data: activityNotes, error: activityNotesError },
   ] = await Promise.all([
-    supabase
-      .from("sprints")
-      .select(
-        "id, project_id, name, sprint_number, start_date, end_date, working_days, daily_work_hours, status",
-      )
-      .in("status", sprintStatuses)
-      .order("start_date", { ascending: false }),
-    supabase.from("projects").select("id, name"),
-    supabase
-      .from("sprint_member_allocations")
-      .select("sprint_id, activity_id, hours")
-      .eq("user_id", user.id),
-    supabase
-      .from("sprint_member_time_off")
-      .select("sprint_id, start_date, end_date")
-      .eq("user_id", user.id),
+    sprintIds.length ? supabase.from("sprint_member_allocations").select("sprint_id, activity_id, hours").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
+    sprintIds.length ? supabase.from("sprint_member_time_off").select("sprint_id, start_date, end_date").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("activity_types").select("id, name, is_active"),
-    supabase
-      .from("sprint_member_activity_notes")
-      .select("sprint_id, activity, note")
-      .eq("user_id", user.id),
+    sprintIds.length ? supabase.from("sprint_member_activity_notes").select("sprint_id, activity, note").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
   ]);
   const error =
     sprintsError ??
-    projectsError ??
     allocationsError ??
     timeOffError ??
     activitiesError ??
@@ -145,15 +159,15 @@ export default async function MySprintActivityPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <CardTitle>
-                        #{sprint.sprint_number} · {sprint.name}
+                        Sprint #{sprint.sprint_number}
                       </CardTitle>
                       <CardDescription>
                         {projectsById.get(sprint.project_id) ?? "Project"} ·{" "}
                         {sprint.start_date} — {sprint.end_date}
                       </CardDescription>
                     </div>
-                    <Badge variant={sprint.status === "active" ? "default" : "outline"}>
-                      {sprint.status === "active" ? "Active" : "Draft"}
+                    <Badge variant={sprint.status === "active" ? "default" : sprint.status === "completed" ? "secondary" : "outline"}>
+                      {SPRINT_STATUS_LABELS[sprint.status as keyof typeof SPRINT_STATUS_LABELS] ?? sprint.status}
                     </Badge>
                   </div>
                 </CardHeader>
