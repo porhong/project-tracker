@@ -145,7 +145,7 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
             name="full_name"
             defaultValue={user.fullName ?? ""}
             maxLength={120}
-            placeholder="Ada Lovelace"
+            placeholder="e.g. Ada Lovelace"
           />
         </div>
 
@@ -156,10 +156,11 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
             name="competency"
             defaultValue={user.competency ?? ""}
             maxLength={120}
-            placeholder="Frontend engineering"
+            placeholder="e.g. Frontend engineering"
           />
           <p className="text-xs text-muted-foreground">Optional primary area of expertise.</p>
         </div>
+
 
         {user.avatarPath ? (
           <div className="flex items-center gap-2 text-sm">

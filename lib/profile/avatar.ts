@@ -42,3 +42,76 @@ export function initialsFor(name: string | null | undefined, email?: string) {
     .join("")
     .toUpperCase();
 }
+
+export type MemberColorVariant = {
+  avatarBg: string;
+  avatarText: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  ringColor: string;
+};
+
+export const MEMBER_COLOR_VARIANTS: readonly MemberColorVariant[] = [
+  {
+    avatarBg: "bg-muted text-primary border border-primary/20",
+    avatarText: "text-primary",
+    badgeBg: "bg-muted",
+    badgeBorder: "border-primary/20",
+    badgeText: "text-primary",
+    ringColor: "ring-primary/40",
+  },
+  {
+    avatarBg: "bg-muted text-chart-2 border border-chart-2/20",
+    avatarText: "text-chart-2",
+    badgeBg: "bg-muted",
+    badgeBorder: "border-chart-2/20",
+    badgeText: "text-chart-2",
+    ringColor: "ring-chart-2/40",
+  },
+  {
+    avatarBg: "bg-muted text-chart-3 border border-chart-3/20",
+    avatarText: "text-chart-3",
+    badgeBg: "bg-muted",
+    badgeBorder: "border-chart-3/20",
+    badgeText: "text-chart-3",
+    ringColor: "ring-chart-3/40",
+  },
+  {
+    avatarBg: "bg-muted text-chart-4 border border-chart-4/20",
+    avatarText: "text-chart-4",
+    badgeBg: "bg-muted",
+    badgeBorder: "border-chart-4/20",
+    badgeText: "text-chart-4",
+    ringColor: "ring-chart-4/40",
+  },
+  {
+    avatarBg: "bg-muted text-chart-5 border border-chart-5/20",
+    avatarText: "text-chart-5",
+    badgeBg: "bg-muted",
+    badgeBorder: "border-chart-5/20",
+    badgeText: "text-chart-5",
+    ringColor: "ring-chart-5/40",
+  },
+  {
+    avatarBg: "bg-secondary text-secondary-foreground border border-border",
+    avatarText: "text-secondary-foreground",
+    badgeBg: "bg-secondary",
+    badgeBorder: "border-border",
+    badgeText: "text-secondary-foreground",
+    ringColor: "ring-border",
+  },
+] as const;
+
+
+export function getMemberColorVariant(nameOrKey?: string | null): MemberColorVariant {
+  if (!nameOrKey) return MEMBER_COLOR_VARIANTS[0];
+  let hash = 0;
+  for (let i = 0; i < nameOrKey.length; i++) {
+    hash = (hash << 5) - hash + nameOrKey.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % MEMBER_COLOR_VARIANTS.length;
+  return MEMBER_COLOR_VARIANTS[index];
+}
+

@@ -42,3 +42,18 @@ export type SprintMemberActivityNoteRow = Pick<
   Tables<"sprint_member_activity_notes">,
   "id" | "sprint_id" | "user_id" | "activity" | "note"
 >;
+
+export type SprintMilestoneRow = Pick<
+  Tables<"sprint_milestones">,
+  | "id"
+  | "sprint_id"
+  | "title"
+  | "description"
+  | "target_date"
+  | "status"
+  | "icon"
+  | "order_index"
+  | "created_at"
+  | "updated_at"
+>;
+

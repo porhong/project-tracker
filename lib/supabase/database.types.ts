@@ -296,6 +296,53 @@ export type Database = {
           },
         ]
       }
+      sprint_milestones: {
+        Row: {
+          created_at: string
+          description: string | null
+          icon: string
+          id: string
+          order_index: number
+          sprint_id: string
+          status: string
+          target_date: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          icon?: string
+          id?: string
+          order_index?: number
+          sprint_id: string
+          status?: string
+          target_date: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          icon?: string
+          id?: string
+          order_index?: number
+          sprint_id?: string
+          status?: string
+          target_date?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sprint_milestones_sprint_id_fkey"
+            columns: ["sprint_id"]
+            isOneToOne: false
+            referencedRelation: "sprints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sprints: {
         Row: {
           created_at: string

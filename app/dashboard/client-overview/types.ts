@@ -52,3 +52,15 @@ export type ClientSprintProgress = {
   planned_allocations: Json;
   activity_notes: Json;
 };
+
+export type ClientSprintMilestone = {
+  id: string;
+  sprint_id: string;
+  title: string;
+  description: string | null;
+  target_date: string;
+  status: "upcoming" | "in_progress" | "completed" | "delayed";
+  icon: "compass" | "sparkles" | "code" | "shield" | "rocket" | "flag" | "check" | "users";
+  order_index: number;
+};
+

@@ -19,9 +19,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { calculateCapacityHours, SPRINT_STATUS_LABELS, WEEKDAYS, workingDaysLabel } from "@/lib/sprint-config";
 import { archiveSprint, createSprint, deleteSprint, reenableSprint, setSprintStatus, unarchiveSprint, updateSprint, type ActionResult } from "../actions";
-import type { ActivityTypeRow, ProjectOption, SprintMemberActivityNoteRow, SprintMemberAllocationRow, SprintMemberRow, SprintMemberTimeOffRow, SprintRow } from "../types";
+import type { ActivityTypeRow, ProjectOption, SprintMemberActivityNoteRow, SprintMemberAllocationRow, SprintMemberRow, SprintMemberTimeOffRow, SprintMilestoneRow, SprintRow } from "../types";
 import { ReleaseNotesDialog } from "./release-notes-dialog";
 import { SprintMemberCapacityDialog } from "./sprint-member-capacity-dialog";
+import { SprintMilestonesDialog } from "./sprint-milestones-dialog";
 
 type Defaults = { working_days: number[]; daily_work_hours: number };
 type FormProps = { mode: "create" | "edit"; sprint?: SprintRow; project: ProjectOption; defaults: Defaults; open: boolean; onOpenChange: (open: boolean) => void };
@@ -77,10 +78,31 @@ function SprintFormDialog({ mode, sprint, project, defaults, open, onOpenChange 
   </form></DialogContent></Dialog>;
 }
 
-export function SprintManager({ project, sprints, defaults, activities, members, allocations, timeOff, activityNotes }: { project: ProjectOption; sprints: SprintRow[]; defaults: Defaults; activities: ActivityTypeRow[]; members: SprintMemberRow[]; allocations: SprintMemberAllocationRow[]; timeOff: SprintMemberTimeOffRow[]; activityNotes: SprintMemberActivityNoteRow[] }) {
+export function SprintManager({
+  project,
+  sprints,
+  defaults,
+  activities,
+  members,
+  allocations,
+  timeOff,
+  activityNotes,
+  milestones,
+}: {
+  project: ProjectOption;
+  sprints: SprintRow[];
+  defaults: Defaults;
+  activities: ActivityTypeRow[];
+  members: SprintMemberRow[];
+  allocations: SprintMemberAllocationRow[];
+  timeOff: SprintMemberTimeOffRow[];
+  activityNotes: SprintMemberActivityNoteRow[];
+  milestones: SprintMilestoneRow[];
+}) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<SprintRow | null>(null);
   const [editingReleaseNotes, setEditingReleaseNotes] = useState<SprintRow | null>(null);
+  const [managingMilestones, setManagingMilestones] = useState<SprintRow | null>(null);
   const [managingCapacity, setManagingCapacity] = useState<SprintRow | null>(null);
   const [starting, setStarting] = useState<SprintRow | null>(null);
   const [completing, setCompleting] = useState<SprintRow | null>(null);
@@ -143,85 +165,97 @@ export function SprintManager({ project, sprints, defaults, activities, members,
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sprints.map((sprint) => (
-              <TableRow key={sprint.id}>
-                <TableCell>
-                  <p className="font-medium">Sprint #{sprint.sprint_number}</p>
-                  <p className="text-xs text-muted-foreground">{sprint.version}{sprint.description ? ` · ${sprint.description}` : ""}</p>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {sprint.start_date} — {sprint.end_date}
-                  <p className="text-xs">{workingDaysLabel(sprint.working_days)} · {sprint.daily_work_hours}h/day</p>
-                </TableCell>
-                <TableCell>{Number(sprint.planned_capacity_hours).toLocaleString("en", { maximumFractionDigits: 2 })}h</TableCell>
-                <TableCell>
-                  <Badge variant={sprint.status === "active" ? "default" : sprint.status === "completed" ? "secondary" : "outline"}>
-                    {SPRINT_STATUS_LABELS[sprint.status as keyof typeof SPRINT_STATUS_LABELS] ?? sprint.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" disabled={pending} />}>
-                      <MoreHorizontalIcon />
-                      <span className="sr-only">Actions for sprint #{sprint.sprint_number}</span>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem onClick={() => setEditingReleaseNotes(sprint)}>
-                        {sprint.status === "completed" || sprint.status === "archived" ? "View release notes" : "Edit release notes"}
-                      </DropdownMenuItem>
-                      {sprint.status !== "completed" && sprint.status !== "archived" ? (
-                        <>
-                          <DropdownMenuItem onClick={() => setManagingCapacity(sprint)}>Manage member capacity</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setEditing(sprint)}>Edit</DropdownMenuItem>
-                        </>
-                      ) : null}
-                      {sprint.status === "draft" ? (
-                        <DropdownMenuItem onClick={() => setStarting(sprint)}>Start sprint</DropdownMenuItem>
-                      ) : null}
-                      {sprint.status === "active" ? (
-                        <DropdownMenuItem onClick={() => setCompleting(sprint)}>Complete sprint</DropdownMenuItem>
-                      ) : null}
-                      {sprint.status === "completed" ? (
+            {sprints.map((sprint) => {
+              const sprintMilestones = milestones.filter((m) => m.sprint_id === sprint.id);
+              return (
+                <TableRow key={sprint.id}>
+                  <TableCell>
+                    <p className="font-medium">Sprint #{sprint.sprint_number}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {sprint.version}
+                      {sprint.description ? ` · ${sprint.description}` : ""}
+                      {sprintMilestones.length > 0
+                        ? ` · ${sprintMilestones.length} milestone${sprintMilestones.length === 1 ? "" : "s"}`
+                        : ""}
+                    </p>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {sprint.start_date} — {sprint.end_date}
+                    <p className="text-xs">{workingDaysLabel(sprint.working_days)} · {sprint.daily_work_hours}h/day</p>
+                  </TableCell>
+                  <TableCell>{Number(sprint.planned_capacity_hours).toLocaleString("en", { maximumFractionDigits: 2 })}h</TableCell>
+                  <TableCell>
+                    <Badge variant={sprint.status === "active" ? "default" : sprint.status === "completed" ? "secondary" : "outline"}>
+                      {SPRINT_STATUS_LABELS[sprint.status as keyof typeof SPRINT_STATUS_LABELS] ?? sprint.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" disabled={pending} />}>
+                        <MoreHorizontalIcon />
+                        <span className="sr-only">Actions for sprint #{sprint.sprint_number}</span>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => setManagingMilestones(sprint)}>
+                          {sprint.status === "completed" || sprint.status === "archived" ? "View milestones" : "Manage milestones"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditingReleaseNotes(sprint)}>
+                          {sprint.status === "completed" || sprint.status === "archived" ? "View release notes" : "Edit release notes"}
+                        </DropdownMenuItem>
+                        {sprint.status !== "completed" && sprint.status !== "archived" ? (
+                          <>
+                            <DropdownMenuItem onClick={() => setManagingCapacity(sprint)}>Manage member capacity</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setEditing(sprint)}>Edit</DropdownMenuItem>
+                          </>
+                        ) : null}
+                        {sprint.status === "draft" ? (
+                          <DropdownMenuItem onClick={() => setStarting(sprint)}>Start sprint</DropdownMenuItem>
+                        ) : null}
+                        {sprint.status === "active" ? (
+                          <DropdownMenuItem onClick={() => setCompleting(sprint)}>Complete sprint</DropdownMenuItem>
+                        ) : null}
+                        {sprint.status === "completed" ? (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setReenabling(sprint);
+                              setReenablePassword("");
+                              setReenableError(null);
+                            }}
+                          >
+                            Re-enable sprint
+                          </DropdownMenuItem>
+                        ) : null}
+                        {sprint.status === "archived" ? (
+                          <DropdownMenuItem onClick={() => run(() => unarchiveSprint(sprint.id), undefined, undefined, "Sprint restored to draft.")}>Restore to draft</DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuSeparator />
+                        {sprint.status !== "archived" ? (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setArchiving(sprint);
+                              setArchivePassword("");
+                              setArchiveError(null);
+                            }}
+                          >
+                            Archive sprint
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuItem
+                          variant="destructive"
                           onClick={() => {
-                            setReenabling(sprint);
-                            setReenablePassword("");
-                            setReenableError(null);
+                            setDeleting(sprint);
+                            setDeletePassword("");
+                            setDeleteError(null);
                           }}
                         >
-                          Re-enable sprint
+                          Delete sprint
                         </DropdownMenuItem>
-                      ) : null}
-                      {sprint.status === "archived" ? (
-                        <DropdownMenuItem onClick={() => run(() => unarchiveSprint(sprint.id), undefined, undefined, "Sprint restored to draft.")}>Restore to draft</DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuSeparator />
-                      {sprint.status !== "archived" ? (
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setArchiving(sprint);
-                            setArchivePassword("");
-                            setArchiveError(null);
-                          }}
-                        >
-                          Archive sprint
-                        </DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => {
-                          setDeleting(sprint);
-                          setDeletePassword("");
-                          setDeleteError(null);
-                        }}
-                      >
-                        Delete sprint
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -229,6 +263,7 @@ export function SprintManager({ project, sprints, defaults, activities, members,
       {creating ? <SprintFormDialog mode="create" project={project} defaults={defaults} open onOpenChange={setCreating} /> : null}
       {editing ? <SprintFormDialog mode="edit" sprint={editing} project={project} defaults={defaults} open onOpenChange={(open) => { if (!open) setEditing(null); }} /> : null}
       {editingReleaseNotes ? <ReleaseNotesDialog sprint={editingReleaseNotes} open onOpenChange={(open) => { if (!open) setEditingReleaseNotes(null); }} /> : null}
+      {managingMilestones ? <SprintMilestonesDialog sprint={managingMilestones} milestones={milestones.filter((m) => m.sprint_id === managingMilestones.id)} open onOpenChange={(open) => { if (!open) setManagingMilestones(null); }} /> : null}
       {managingCapacity ? <SprintMemberCapacityDialog sprint={managingCapacity} activities={activities} members={members} allocations={allocations.filter((allocation) => allocation.sprint_id === managingCapacity.id)} timeOff={timeOff.filter((record) => record.sprint_id === managingCapacity.id)} activityNotes={activityNotes.filter((note) => note.sprint_id === managingCapacity.id)} open onOpenChange={(open) => { if (!open) setManagingCapacity(null); }} /> : null}
 
       <Dialog open={Boolean(starting)} onOpenChange={(open) => { if (!open) setStarting(null); }}>

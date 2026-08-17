@@ -302,3 +302,119 @@ export async function saveSprintMemberPlan(
   revalidatePath("/dashboard/my-sprint-activity");
   return { ok: true };
 }
+
+const ALLOWED_MILESTONE_STATUSES = new Set(["upcoming", "in_progress", "completed", "delayed"]);
+const ALLOWED_MILESTONE_ICONS = new Set([
+  "compass",
+  "sparkles",
+  "code",
+  "shield",
+  "rocket",
+  "flag",
+  "check",
+  "users",
+]);
+
+export type MilestoneInput = {
+  title: string;
+  description: string | null;
+  target_date: string;
+  status: "upcoming" | "in_progress" | "completed" | "delayed";
+  icon: "compass" | "sparkles" | "code" | "shield" | "rocket" | "flag" | "check" | "users";
+  order_index: number;
+};
+
+function parseMilestonesInput(
+  formData: FormData,
+): { data: MilestoneInput[] } | { error: string } {
+  try {
+    const raw: unknown = JSON.parse(String(formData.get("milestones") ?? "[]"));
+    if (!Array.isArray(raw)) return { error: "Invalid milestones payload." };
+
+    const milestones: MilestoneInput[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const item = raw[i];
+      if (!isRecord(item)) return { error: `Invalid milestone at position ${i + 1}.` };
+
+      const title = String(item.title ?? "").trim();
+      const description = String(item.description ?? "").trim() || null;
+      const targetDate = String(item.target_date ?? "").trim();
+      const status = String(item.status ?? "upcoming").trim();
+      const icon = String(item.icon ?? "flag").trim();
+
+      if (!title) {
+        return { error: `Milestone #${i + 1} must have a title.` };
+      }
+      if (title.length > 120) {
+        return { error: `Milestone #${i + 1} title cannot exceed 120 characters.` };
+      }
+      if (description && description.length > 1000) {
+        return { error: `Milestone #${i + 1} description cannot exceed 1000 characters.` };
+      }
+      if (!isDate(targetDate)) {
+        return { error: `Milestone #${i + 1} must have a valid target date (YYYY-MM-DD).` };
+      }
+      if (!ALLOWED_MILESTONE_STATUSES.has(status)) {
+        return { error: `Milestone #${i + 1} has an invalid status.` };
+      }
+      if (!ALLOWED_MILESTONE_ICONS.has(icon)) {
+        return { error: `Milestone #${i + 1} has an invalid icon.` };
+      }
+
+      milestones.push({
+        title,
+        description,
+        target_date: targetDate,
+        status: status as MilestoneInput["status"],
+        icon: icon as MilestoneInput["icon"],
+        order_index: i,
+      });
+    }
+
+    return { data: milestones };
+  } catch {
+    return { error: "Invalid milestones payload." };
+  }
+}
+
+export async function saveSprintMilestones(
+  _prevState: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return fail("Missing sprint.");
+
+  const parsed = parseMilestonesInput(formData);
+  if ("error" in parsed) return fail(parsed.error);
+
+  const editable = await loadEditableSprint(id);
+  if ("error" in editable) return fail(editable.error ?? "Sprint not found.");
+
+  const { error: deleteError } = await editable.supabase
+    .from("sprint_milestones")
+    .delete()
+    .eq("sprint_id", id);
+  if (deleteError) return fail(deleteError.message);
+
+  if (parsed.data.length > 0) {
+    const rows = parsed.data.map((m, index) => ({
+      sprint_id: id,
+      title: m.title,
+      description: m.description,
+      target_date: m.target_date,
+      status: m.status,
+      icon: m.icon,
+      order_index: index,
+    }));
+
+    const { error: insertError } = await editable.supabase
+      .from("sprint_milestones")
+      .insert(rows);
+    if (insertError) return fail(insertError.message);
+  }
+
+  revalidate();
+  return { ok: true };
+}
+

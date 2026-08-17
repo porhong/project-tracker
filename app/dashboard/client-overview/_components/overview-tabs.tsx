@@ -41,9 +41,9 @@ export function OverviewTabs({
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange}>
       <TabsList aria-label="Project overview sections" variant="line">
-        <TabsTrigger value="timeline">Sprint Time Line</TabsTrigger>
-        <TabsTrigger value="activity">Project member activity</TabsTrigger>
-        <TabsTrigger value="release-notes">Release notes</TabsTrigger>
+        <TabsTrigger value="timeline">Sprint Overview</TabsTrigger>
+        <TabsTrigger value="activity">Team & Work</TabsTrigger>
+        <TabsTrigger value="release-notes">Release Notes</TabsTrigger>
       </TabsList>
       <TabsContent value="timeline" className="pt-4">
         {sprintTimeline}

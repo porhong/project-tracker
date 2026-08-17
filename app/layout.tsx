@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // The shadcn preset specifies Inter for `--font-sans`; `--font-heading`
@@ -29,9 +30,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn("h-full antialiased", inter.variable, geistMono.variable)}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <TooltipProvider>{children}</TooltipProvider>
         <Toaster />
       </body>
     </html>
   );
 }
+

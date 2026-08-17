@@ -1,25 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   ActivityIcon,
-  ArrowRightIcon,
-  CalendarDaysIcon,
+  AlertTriangleIcon,
   CalendarIcon,
   CheckCircle2Icon,
+  CheckIcon,
   Clock4Icon,
+  Code2Icon,
   CompassIcon,
-  FileTextIcon,
   FlagIcon,
   HourglassIcon,
   MilestoneIcon,
   RocketIcon,
   ShieldCheckIcon,
   SparklesIcon,
+  UsersIcon,
 } from "lucide-react";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+} from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -27,13 +32,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { getMemberColorVariant, initialsFor } from "@/lib/profile/avatar";
 import { workingDaysLabel } from "@/lib/sprint-config";
-import type { ClientSprint, ClientSprintProgress } from "../types";
+import { cn } from "@/lib/utils";
+import { ActivityContributorsGroup } from "./activity-contributors-group";
+import {
+  MemberProfilePopover,
+  type MemberProfileData,
+} from "./member-profile-popover";
+import type {
+  ActivityNote,
+  ClientSprint,
+  ClientSprintMilestone,
+  ClientSprintProgress,
+  PlannedAllocation,
+} from "../types";
 
 type SprintTimelineProps = {
   sprint: ClientSprint;
   progressRows: ClientSprintProgress[];
   totalPlannedHours: number;
+  milestones?: ClientSprintMilestone[];
 };
 
 const fullDateFormat = new Intl.DateTimeFormat("en", {
@@ -45,14 +65,6 @@ const fullDateFormat = new Intl.DateTimeFormat("en", {
 
 const monthDayFormat = new Intl.DateTimeFormat("en", {
   month: "short",
-  day: "numeric",
-});
-
-const weekdayShortFormat = new Intl.DateTimeFormat("en", {
-  weekday: "short",
-});
-
-const dayNumFormat = new Intl.DateTimeFormat("en", {
   day: "numeric",
 });
 
@@ -77,74 +89,98 @@ function formatDateFull(dateStr: string) {
 }
 
 const hours = (value: number) =>
-  value.toLocaleString("en", { maximumFractionDigits: 2 });
+  value.toLocaleString("en", { maximumFractionDigits: 1 });
+
+const ICON_MAP = {
+  compass: CompassIcon,
+  sparkles: SparklesIcon,
+  code: Code2Icon,
+  shield: ShieldCheckIcon,
+  rocket: RocketIcon,
+  flag: FlagIcon,
+  check: CheckIcon,
+  users: UsersIcon,
+} as const;
+
+function isPlannedAllocation(value: unknown): value is PlannedAllocation {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "activity" in value &&
+    "hours" in value &&
+    typeof value.activity === "string" &&
+    typeof value.hours === "number"
+  );
+}
+
+function isActivityNote(value: unknown): value is ActivityNote {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "activity" in value &&
+    "note" in value &&
+    "updated_at" in value &&
+    typeof value.activity === "string" &&
+    (typeof value.note === "string" || value.note === null) &&
+    typeof value.updated_at === "string"
+  );
+}
+
+const SEGMENT_BG_COLORS = [
+  "bg-primary",
+  "bg-chart-2",
+  "bg-chart-3",
+  "bg-chart-4",
+  "bg-chart-5",
+  "bg-accent-foreground/70",
+];
+
+const SEGMENT_TEXT_COLORS = [
+  "text-primary",
+  "text-chart-2",
+  "text-chart-3",
+  "text-chart-4",
+  "text-chart-5",
+  "text-foreground",
+];
 
 export function SprintTimeline({
   sprint,
   progressRows,
   totalPlannedHours,
+  milestones: customMilestones,
 }: SprintTimelineProps) {
-  const router = useRouter();
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
   // Current date in UTC representation for consistent comparison
   const now = new Date();
   const todayIso = formatIsoDate(now);
 
-  // Calculate day-by-day calendar schedule and progress
+  // Calculate high-level calendar schedule and progress
   const timelineData = useMemo(() => {
     const start = parseUtcDate(sprint.start_date);
     const end = parseUtcDate(sprint.end_date);
     const workingDaysSet = new Set(sprint.working_days);
 
-    const days: Array<{
-      iso: string;
-      date: Date;
-      dayOfWeek: number; // 1=Mon, 7=Sun
-      dayName: string;
-      dayNum: string;
-      monthDay: string;
-      isWorkingDay: boolean;
-      isPast: boolean;
-      isToday: boolean;
-      isFuture: boolean;
-      workingDayIndex: number | null; // 1-based index among working days
-    }> = [];
-
+    let totalCalendarDays = 0;
     let totalWorkingDays = 0;
     let elapsedWorkingDays = 0;
     const cursor = new Date(start);
 
     while (cursor <= end) {
+      totalCalendarDays += 1;
       const iso = formatIsoDate(cursor);
       const isoDayOfWeek = ((cursor.getUTCDay() + 6) % 7) + 1; // 1 (Mon) to 7 (Sun)
       const isWorkingDay = workingDaysSet.has(isoDayOfWeek);
       const isPast = iso < todayIso;
       const isToday = iso === todayIso;
-      const isFuture = iso > todayIso;
 
-      let workingDayIndex: number | null = null;
       if (isWorkingDay) {
         totalWorkingDays += 1;
-        workingDayIndex = totalWorkingDays;
-
         if (sprint.status === "completed" || isPast || isToday) {
           elapsedWorkingDays += 1;
         }
       }
-
-      days.push({
-        iso,
-        date: new Date(cursor),
-        dayOfWeek: isoDayOfWeek,
-        dayName: weekdayShortFormat.format(cursor),
-        dayNum: dayNumFormat.format(cursor),
-        monthDay: monthDayFormat.format(cursor),
-        isWorkingDay,
-        isPast,
-        isToday,
-        isFuture,
-        workingDayIndex,
-      });
 
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
@@ -163,88 +199,217 @@ export function SprintTimeline({
 
     const isUpcoming = todayIso < sprint.start_date;
     const isEnded = todayIso > sprint.end_date || sprint.status === "completed";
-    const isOngoing = !isUpcoming && !isEnded && sprint.status === "active";
-    const workingDayItems = days.filter((d) => d.isWorkingDay);
 
     return {
-      days,
-      workingDayItems,
-      totalCalendarDays: days.length,
+      totalCalendarDays,
       totalWorkingDays,
       elapsedWorkingDays,
       remainingWorkingDays,
       progressPercent,
       isUpcoming,
       isEnded,
-      isOngoing,
     };
   }, [sprint, todayIso]);
 
-  // Milestones lifecycle phases calculated relative to sprint dates
+  // Delivery milestones: uses live custom milestones if configured, or falls back to standard lifecycle phases
   const milestones = useMemo(() => {
-    const { totalWorkingDays, elapsedWorkingDays, isEnded, isUpcoming, days } = timelineData;
+    if (customMilestones && customMilestones.length > 0) {
+      return customMilestones
+        .slice()
+        .sort((a, b) => a.order_index - b.order_index)
+        .map((m, idx) => {
+          const Icon = ICON_MAP[m.icon as keyof typeof ICON_MAP] ?? FlagIcon;
+          const timeframe = monthDayFormat.format(parseUtcDate(m.target_date));
+          const targetIso = m.target_date;
+
+          let relativeLabel = "Upcoming";
+          let isDueToday = false;
+          let isOverdue = false;
+
+          if (m.status === "completed") {
+            relativeLabel = "Delivered";
+          } else if (targetIso === todayIso) {
+            relativeLabel = "Due today";
+            isDueToday = true;
+          } else if (targetIso < todayIso) {
+            relativeLabel = "Past target";
+            isOverdue = true;
+          } else {
+            const target = parseUtcDate(targetIso);
+            const today = parseUtcDate(todayIso);
+            const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            relativeLabel = `In ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+          }
+
+          return {
+            id: m.id,
+            phaseNumber: `Phase 0${idx + 1}`,
+            title: m.title,
+            targetDate: m.target_date,
+            timeframe,
+            relativeLabel,
+            isDueToday,
+            isOverdue,
+            description: m.description || "Sprint delivery milestone deliverable.",
+            icon: Icon,
+            status: m.status,
+          };
+        });
+    }
+
+    const { totalWorkingDays, elapsedWorkingDays, isEnded, isUpcoming } = timelineData;
     const startStr = monthDayFormat.format(parseUtcDate(sprint.start_date));
     const endStr = monthDayFormat.format(parseUtcDate(sprint.end_date));
-
-    // Midpoint date
-    const midIndex = Math.floor(days.length / 2);
-    const midDateStr = days[midIndex]?.monthDay ?? "Mid-Sprint";
-
-    // QA phase date (~75% mark)
-    const qaIndex = Math.min(days.length - 1, Math.max(0, Math.floor(days.length * 0.75)));
-    const qaDateStr = days[qaIndex]?.monthDay ?? "Sprint Final Days";
-
     const percent = totalWorkingDays > 0 ? (elapsedWorkingDays / totalWorkingDays) * 100 : 0;
 
     return [
       {
         id: "phase-1",
-        title: "Sprint Kickoff & Scope Alignment",
+        phaseNumber: "Phase 01",
+        title: "Kickoff & Scope",
+        targetDate: sprint.start_date,
         timeframe: startStr,
-        description:
-          "Sprint goals finalized, technical requirements reviewed, and initial capacity allocated.",
+        relativeLabel: isEnded || percent >= 20 ? "Completed" : isUpcoming ? "Upcoming" : "In Progress",
+        isDueToday: false,
+        isOverdue: false,
+        description: "Align sprint objectives, review technical requirements, and assign team priorities.",
         icon: CompassIcon,
-        status: isEnded || percent >= 20 ? ("completed" as const) : isUpcoming ? ("upcoming" as const) : ("current" as const),
+        status: isEnded || percent >= 20 ? ("completed" as const) : isUpcoming ? ("upcoming" as const) : ("in_progress" as const),
       },
       {
         id: "phase-2",
-        title: "Core Build & Feature Development",
-        timeframe: `${startStr} – ${midDateStr}`,
-        description:
-          "Active engineering of user stories, frontend interfaces, APIs, and feature integration.",
+        phaseNumber: "Phase 02",
+        title: "Core Development",
+        targetDate: sprint.start_date,
+        timeframe: `${startStr} – Mid Sprint`,
+        relativeLabel: isEnded || percent >= 70 ? "Completed" : percent >= 20 ? "In Progress" : "Upcoming",
+        isDueToday: false,
+        isOverdue: false,
+        description: "Develop core feature capabilities, user interface enhancements, and service integrations.",
         icon: SparklesIcon,
-        status: isEnded || percent >= 70 ? ("completed" as const) : percent >= 20 ? ("current" as const) : ("upcoming" as const),
+        status: isEnded || percent >= 70 ? ("completed" as const) : percent >= 20 ? ("in_progress" as const) : ("upcoming" as const),
       },
       {
         id: "phase-3",
-        title: "Quality Assurance & Staging Review",
-        timeframe: `${qaDateStr} – ${endStr}`,
-        description:
-          "Internal functional testing, performance checks, bug fixes, and staging readiness validation.",
+        phaseNumber: "Phase 03",
+        title: "QA & Verification",
+        targetDate: sprint.end_date,
+        timeframe: `Late Sprint – ${endStr}`,
+        relativeLabel: isEnded || percent >= 95 ? "Completed" : percent >= 70 ? "In Verification" : "Upcoming",
+        isDueToday: false,
+        isOverdue: false,
+        description: "End-to-end quality assurance, issue resolution, staging tests, and sign-off.",
         icon: ShieldCheckIcon,
-        status: isEnded || percent >= 95 ? ("completed" as const) : percent >= 70 ? ("current" as const) : ("upcoming" as const),
+        status: isEnded || percent >= 95 ? ("completed" as const) : percent >= 70 ? ("in_progress" as const) : ("upcoming" as const),
       },
       {
         id: "phase-4",
-        title: "Sprint Release & Demo Handover",
+        phaseNumber: "Phase 04",
+        title: "Release & Handover",
+        targetDate: sprint.end_date,
         timeframe: endStr,
-        description:
-          "Final deployment, release notes publication, version release, and sprint review demo.",
+        relativeLabel: isEnded ? "Delivered" : percent >= 95 ? "Release Ready" : "Target Release",
+        isDueToday: false,
+        isOverdue: false,
+        description: "Production deployment, release documentation publication, and sprint delivery review.",
         icon: RocketIcon,
-        status: isEnded ? ("completed" as const) : percent >= 95 ? ("current" as const) : ("upcoming" as const),
+        status: isEnded ? ("completed" as const) : percent >= 95 ? ("in_progress" as const) : ("upcoming" as const),
       },
     ];
-  }, [sprint, timelineData]);
+  }, [customMilestones, sprint, timelineData, todayIso]);
 
-  const navigateToTab = (tab: "activity" | "release-notes") => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", tab);
-    router.replace(url.pathname + url.search, { scroll: false });
-  };
+  // Milestone Completion Metrics
+  const milestoneMetrics = useMemo(() => {
+    const total = milestones.length;
+    const completed = milestones.filter((m) => m.status === "completed").length;
+    const delayed = milestones.filter((m) => m.status === "delayed" || m.isOverdue).length;
+    const inProgress = milestones.filter((m) => m.status === "in_progress").length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return { total, completed, delayed, inProgress, percent };
+  }, [milestones]);
+
+  // Aggregated Sprint Effort Distribution by Activity
+  const effortBreakdown = useMemo(() => {
+    const activityMap = new Map<
+      string,
+      {
+        activity: string;
+        hours: number;
+        contributors: Set<string>;
+      }
+    >();
+
+    progressRows.forEach((row) => {
+      const rowAllocations = Array.isArray(row.planned_allocations)
+        ? row.planned_allocations.filter(isPlannedAllocation)
+        : [];
+
+      rowAllocations.forEach((alloc) => {
+        const existing = activityMap.get(alloc.activity) ?? {
+          activity: alloc.activity,
+          hours: 0,
+          contributors: new Set<string>(),
+        };
+        existing.hours += alloc.hours;
+        if (row.member_name) {
+          existing.contributors.add(row.member_name);
+        }
+        activityMap.set(alloc.activity, existing);
+      });
+    });
+
+    return Array.from(activityMap.values())
+      .sort((a, b) => b.hours - a.hours)
+      .map((item, index) => {
+        const percentage =
+          totalPlannedHours > 0
+            ? Math.round((item.hours / totalPlannedHours) * 100)
+            : 0;
+        return {
+          ...item,
+          percentage,
+          contributors: Array.from(item.contributors),
+          bgColor: SEGMENT_BG_COLORS[index % SEGMENT_BG_COLORS.length] ?? "bg-primary",
+          textColor: SEGMENT_TEXT_COLORS[index % SEGMENT_TEXT_COLORS.length] ?? "text-primary",
+        };
+      });
+  }, [progressRows, totalPlannedHours]);
+
+  // Map of member name to full profile details for rich popovers
+  const memberProfilesMap = useMemo(() => {
+    const map = new Map<string, MemberProfileData>();
+    progressRows.forEach((row) => {
+      const name = row.member_name || "Project member";
+      const rowAllocations = Array.isArray(row.planned_allocations)
+        ? row.planned_allocations.filter(isPlannedAllocation)
+        : [];
+      const notes = Array.isArray(row.activity_notes)
+        ? row.activity_notes.filter(isActivityNote)
+        : [];
+      const totalSprintHours = rowAllocations.reduce((sum, a) => sum + a.hours, 0);
+      const latestNote = notes.length > 0 ? notes[0] : null;
+
+      map.set(name, {
+        name,
+        competency: row.competency || "Team member",
+        totalSprintHours,
+        allocations: rowAllocations,
+        notes,
+        latestNote,
+      });
+    });
+    return map;
+  }, [progressRows]);
+
+  const activeMilestone =
+    milestones.find((m) => m.id === selectedMilestoneId) ??
+    milestones.find((m) => m.status === "in_progress") ??
+    milestones[0];
 
   return (
     <div className="space-y-6">
-      {/* Hero Sprint Summary Card */}
+      {/* 1. Executive Sprint Hero & Overview */}
       <Card className="overflow-hidden border-border/80 shadow-xs">
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -257,14 +422,7 @@ export function SprintTimeline({
                   {sprint.version}
                 </Badge>
                 {sprint.status === "active" ? (
-                  <Badge
-                    variant="default"
-                    className="gap-1.5 font-medium shadow-xs"
-                  >
-                    <span className="relative flex size-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-foreground opacity-75"></span>
-                      <span className="relative inline-flex size-2 rounded-full bg-primary-foreground"></span>
-                    </span>
+                  <Badge variant="default" className="font-medium">
                     Active Sprint
                   </Badge>
                 ) : (
@@ -279,419 +437,406 @@ export function SprintTimeline({
                 <span>
                   {formatDateFull(sprint.start_date)} — {formatDateFull(sprint.end_date)}
                 </span>
-                <span className="text-muted-foreground/50">•</span>
+                <span className="text-muted-foreground/40">•</span>
                 <span className="font-medium text-foreground/80">
-                  {timelineData.totalCalendarDays} calendar days ({timelineData.totalWorkingDays} working days)
+                  {timelineData.totalWorkingDays} working days ({workingDaysLabel(sprint.working_days)})
                 </span>
               </CardDescription>
             </div>
 
-            {/* Status callout pill */}
+            {/* Executive Status Badge */}
             <div className="flex items-center gap-2 self-start rounded-2xl border bg-muted/30 px-3.5 py-1.5 text-xs">
               <Clock4Icon className="size-4 text-primary shrink-0" />
               {sprint.status === "completed" ? (
-                <span className="font-medium text-foreground">
-                  Sprint finalized on schedule
-                </span>
+                <span className="font-medium text-foreground">Delivered on schedule</span>
               ) : timelineData.isUpcoming ? (
                 <span className="font-medium text-foreground">
-                  Starts in {timelineData.days.filter((d) => d.isPast).length === 0 ? "upcoming days" : "soon"}
+                  Starts on {monthDayFormat.format(parseUtcDate(sprint.start_date))}
                 </span>
               ) : (
                 <span className="font-medium text-foreground">
                   {timelineData.remainingWorkingDays === 0
                     ? "Final sprint day in progress"
-                    : `${timelineData.remainingWorkingDays} working day${timelineData.remainingWorkingDays === 1 ? "" : "s"} remaining`}
+                    : `${timelineData.remainingWorkingDays} working day${
+                        timelineData.remainingWorkingDays === 1 ? "" : "s"
+                      } remaining`}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Sprint Goal / Scope Description if present */}
+          {/* Sprint Objective Banner */}
           {sprint.description ? (
-            <div className="mt-4 rounded-2xl border bg-primary/5 p-3.5 text-sm text-foreground/90">
+            <div className="mt-3.5 rounded-2xl border bg-primary/5 p-3.5 text-sm text-foreground/90">
               <div className="flex items-start gap-2.5">
                 <SparklesIcon className="size-4 shrink-0 text-primary mt-0.5" />
                 <div>
                   <p className="font-semibold text-xs text-primary uppercase tracking-wider mb-0.5">
-                    Sprint Objective &amp; Focus
+                    Sprint Goal &amp; Scope
                   </p>
                   <p className="text-sm leading-relaxed">{sprint.description}</p>
                 </div>
               </div>
             </div>
           ) : null}
+
+          {/* Unified Timeline Progress Track */}
+          <div className="mt-4 pt-4 border-t border-border/60 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <FlagIcon className="size-3.5 text-primary" />
+                <span>Sprint Progress</span>
+              </div>
+              <span className="font-semibold tabular-nums text-foreground">
+                {timelineData.progressPercent}%
+                <span className="font-normal text-muted-foreground ml-1">
+                  ({timelineData.elapsedWorkingDays} of {timelineData.totalWorkingDays} work days)
+                </span>
+              </span>
+            </div>
+            <Progress value={timelineData.progressPercent} className="h-2 w-full" />
+          </div>
         </CardHeader>
 
-        {/* 4 Metric Highlights */}
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-0">
-          {/* Progress % */}
-          <div className="rounded-2xl border bg-muted/20 p-4 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                <FlagIcon className="size-3.5 text-primary" />
-                Sprint Progress
+        {/* 3 Clear Executive KPI Metric Highlights */}
+        <CardContent className="grid gap-3 sm:grid-cols-3 pt-0">
+          {/* 1. Schedule & Progress */}
+          <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span className="flex items-center gap-1.5">
+                <HourglassIcon className="size-3.5 text-primary" />
+                Delivery Pace
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                {timelineData.progressPercent === 100 ? (
-                  <>
-                    <CheckCircle2Icon className="size-3" data-icon="inline-start" />
-                    100%
-                  </>
-                ) : (
-                  `${timelineData.progressPercent}%`
-                )}
-              </span>
+              <span className="text-primary font-semibold">{timelineData.progressPercent}%</span>
             </div>
-
             <p className="text-2xl font-bold tabular-nums text-foreground">
               {timelineData.elapsedWorkingDays}{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                / {timelineData.totalWorkingDays} work days
+              <span className="text-xs font-normal text-muted-foreground">
+                / {timelineData.totalWorkingDays} days
               </span>
-            </p>
-
-            {/* Modern Segmented Progress Track */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1 w-full">
-                {timelineData.workingDayItems.map((day) => {
-                  const isPastOrCompleted =
-                    sprint.status === "completed" ||
-                    day.isPast ||
-                    (day.isToday && timelineData.progressPercent === 100);
-                  const isCurrentToday =
-                    day.isToday &&
-                    sprint.status === "active" &&
-                    timelineData.progressPercent < 100;
-
-                  return (
-                    <div
-                      key={day.iso}
-                      title={`${day.monthDay}: Day ${day.workingDayIndex} (${isPastOrCompleted ? "Completed" : isCurrentToday ? "Today" : "Scheduled"})`}
-                      className={`h-2.5 rounded-full flex-1 transition-all ${
-                        isCurrentToday
-                          ? "bg-primary ring-2 ring-primary/40 shadow-xs"
-                          : isPastOrCompleted
-                            ? "bg-primary"
-                            : "bg-muted"
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-muted-foreground truncate">
-                {sprint.status === "completed"
-                  ? "Full sprint duration completed"
-                  : timelineData.isUpcoming
-                    ? `Starts on ${monthDayFormat.format(parseUtcDate(sprint.start_date))}`
-                    : `${timelineData.remainingWorkingDays} working day${timelineData.remainingWorkingDays === 1 ? "" : "s"} remaining`}
-              </p>
-            </div>
-          </div>
-
-          {/* Time Remaining */}
-          <div className="rounded-2xl border bg-muted/20 p-4 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-              <HourglassIcon className="size-3.5 text-primary" />
-              <span>Sprint Pace</span>
-            </div>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {sprint.status === "completed"
-                ? "Completed"
-                : `${timelineData.remainingWorkingDays} ${timelineData.remainingWorkingDays === 1 ? "Day" : "Days"}`}
             </p>
             <p className="text-[11px] text-muted-foreground truncate">
               {sprint.status === "completed"
-                ? "All planned days delivered"
-                : `Ends on ${monthDayFormat.format(parseUtcDate(sprint.end_date))}`}
+                ? "Delivered on schedule"
+                : `${timelineData.remainingWorkingDays} work days left · Target: ${monthDayFormat.format(
+                    parseUtcDate(sprint.end_date),
+                  )}`}
             </p>
           </div>
 
-          {/* Planned Effort */}
-          <div className="rounded-2xl border bg-muted/20 p-4 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-              <ActivityIcon className="size-3.5 text-primary" />
-              <span>Planned Capacity</span>
+          {/* 2. Deliverables Health */}
+          <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span className="flex items-center gap-1.5">
+                <MilestoneIcon className="size-3.5 text-primary" />
+                Deliverables
+              </span>
+              {milestoneMetrics.delayed > 0 ? (
+                <span className="text-destructive font-semibold flex items-center gap-1 text-[11px]">
+                  <AlertTriangleIcon className="size-3" />
+                  {milestoneMetrics.delayed} delayed
+                </span>
+              ) : (
+                <span className="text-primary font-semibold text-[11px]">
+                  {milestoneMetrics.percent}% on track
+                </span>
+              )}
+            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {milestoneMetrics.completed}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                / {milestoneMetrics.total} delivered
+              </span>
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {milestoneMetrics.inProgress > 0
+                ? `${milestoneMetrics.inProgress} currently in progress`
+                : "All delivery phases mapped"}
+            </p>
+          </div>
+
+          {/* 3. Team Capacity */}
+          <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                <UsersIcon className="size-3.5 text-primary" />
+                <span>Team &amp; Effort</span>
+              </div>
+              {/* Sprint Team Avatars Preview */}
+              {progressRows.length > 0 ? (
+                <AvatarGroup className="-space-x-1.5">
+                  {progressRows.slice(0, 3).map((row) => {
+                    const name = row.member_name || "Member";
+                    const profile = memberProfilesMap.get(name);
+                    if (!profile) return null;
+                    const variant = getMemberColorVariant(name);
+                    return (
+                      <MemberProfilePopover
+                        key={name}
+                        member={profile}
+                        showTooltip
+                        tooltipText={`${name} (${profile.competency}) · ${hours(profile.totalSprintHours)}h`}
+                      >
+                        <Avatar size="sm" className="border-2 border-background bg-background ring-1 ring-border/50">
+                          <AvatarFallback
+                            className={cn(
+                              "text-[9px] font-semibold select-none",
+                              variant.avatarBg,
+                            )}
+                          >
+                            {initialsFor(name)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </MemberProfilePopover>
+                    );
+                  })}
+                  {progressRows.length > 3 ? (
+                    <AvatarGroupCount className="text-[9px] font-semibold bg-muted text-muted-foreground border-2 border-background">
+                      +{progressRows.length - 3}
+                    </AvatarGroupCount>
+                  ) : null}
+                </AvatarGroup>
+              ) : null}
             </div>
             <p className="text-2xl font-bold tabular-nums text-foreground">
               {hours(totalPlannedHours)}h
             </p>
-            <p className="text-[11px] text-muted-foreground">
-              Across {progressRows.length} team member{progressRows.length === 1 ? "" : "s"}
-            </p>
-          </div>
-
-          {/* Working Schedule */}
-          <div className="rounded-2xl border bg-muted/20 p-4 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-              <CalendarDaysIcon className="size-3.5 text-primary" />
-              <span>Sprint Schedule</span>
-            </div>
-            <p className="text-sm font-semibold text-foreground pt-1 truncate">
-              {workingDaysLabel(sprint.working_days)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              {hours(sprint.daily_work_hours)}h standard daily capacity
+            <p className="text-[11px] text-muted-foreground truncate">
+              {progressRows.length} team member{progressRows.length === 1 ? "" : "s"} assigned
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Calendar Day-by-Day Timeline Visualizer */}
-      <Card>
+      {/* 2. Key Deliverables & Milestones Pipeline */}
+      <Card className="border-border/80 shadow-xs">
         <CardHeader className="pb-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <CalendarDaysIcon className="size-4 text-primary" />
-                Sprint Day-by-Day Schedule
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Visual timeline of all calendar days in this sprint period. Working days and rest days are clearly designated.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-full bg-primary inline-block"></span>
-                <span>Work day</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-full border border-primary bg-primary/20 inline-block"></span>
-                <span>Today</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-full bg-muted border inline-block"></span>
-                <span>Rest day</span>
-              </span>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="relative overflow-x-auto pb-3 pt-1">
-            <div className="flex items-stretch gap-2 min-w-max">
-              {timelineData.days.map((day) => {
-                const isSprintCompleted = sprint.status === "completed";
-                const isPastWorkingDay =
-                  (isSprintCompleted || day.isPast) && day.isWorkingDay;
-                const isTodayWorkingDay = day.isToday && day.isWorkingDay;
-
-                return (
-                  <div
-                    key={day.iso}
-                    className={`relative flex flex-col items-center justify-between rounded-2xl p-2.5 w-20 transition-all border ${
-                      isTodayWorkingDay
-                        ? "border-primary bg-primary/10 shadow-xs ring-2 ring-primary/30"
-                        : isPastWorkingDay
-                          ? "border-primary/30 bg-primary/5 text-foreground"
-                          : day.isWorkingDay
-                            ? "border-border bg-card text-foreground"
-                            : "border-dashed border-border/60 bg-muted/30 text-muted-foreground/70"
-                    }`}
-                  >
-                    {/* Today marker badge */}
-                    {day.isToday ? (
-                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-bold text-primary-foreground uppercase tracking-wider shadow-xs">
-                        Today
-                      </span>
-                    ) : null}
-
-                    {/* Day name (Mon, Tue) */}
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                      {day.dayName}
-                    </span>
-
-                    {/* Day number (27, 28) */}
-                    <span
-                      className={`text-lg font-bold tabular-nums my-1 ${
-                        isTodayWorkingDay
-                          ? "text-primary"
-                          : isPastWorkingDay
-                            ? "text-foreground"
-                            : day.isWorkingDay
-                              ? "text-foreground/90"
-                              : "text-muted-foreground/60"
-                      }`}
-                    >
-                      {day.dayNum}
-                    </span>
-
-                    {/* Status badge */}
-                    <div className="w-full text-center mt-1">
-                      {day.isWorkingDay ? (
-                        <div className="space-y-0.5">
-                          <span
-                            className={`inline-flex items-center justify-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-full truncate ${
-                              isPastWorkingDay
-                                ? "bg-primary/20 text-primary"
-                                : isTodayWorkingDay
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {isPastWorkingDay ? (
-                              <CheckCircle2Icon className="size-2.5 mr-0.5 inline" />
-                            ) : null}
-                            Day {day.workingDayIndex}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[9px] text-muted-foreground/60 font-medium block">
-                          Rest
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Sprint Lifecycle Milestones Roadmap */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-1">
+          <div className="space-y-0.5">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <MilestoneIcon className="size-4 text-primary" />
-              Sprint Delivery Milestones
+              Key Deliverables &amp; Milestones
             </CardTitle>
             <CardDescription className="text-xs">
-              Clear progression of key phases that occur during every sprint from kickoff to release.
+              Sequential delivery phases and target deliverables for this sprint.
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {milestones.map((milestone, index) => {
-              const Icon = milestone.icon;
-              const isCompleted = milestone.status === "completed";
-              const isCurrent = milestone.status === "current";
 
-              return (
-                <div
-                  key={milestone.id}
-                  className={`relative flex flex-col justify-between rounded-2xl border p-4 space-y-3 transition-all ${
-                    isCurrent
-                      ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/20"
-                      : isCompleted
-                        ? "border-border bg-card"
-                        : "border-border/70 bg-muted/10 opacity-80"
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div
-                        className={`flex size-8 items-center justify-center rounded-2xl ${
-                          isCurrent
-                            ? "bg-primary text-primary-foreground"
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            {/* Stepper Pipeline */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {milestones.map((milestone, index) => {
+                const Icon = milestone.icon;
+                const isCompleted = milestone.status === "completed";
+                const isCurrent = milestone.status === "in_progress";
+                const isDelayed = milestone.status === "delayed" || milestone.isOverdue;
+                const isSelected = activeMilestone?.id === milestone.id;
+
+                return (
+                  <button
+                    key={milestone.id}
+                    type="button"
+                    onClick={() => setSelectedMilestoneId(milestone.id)}
+                    className={`group relative text-left flex flex-col justify-between rounded-2xl border p-3.5 space-y-2.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? "ring-2 ring-primary border-primary bg-primary/5 shadow-xs"
+                        : isCurrent
+                          ? "border-primary/50 bg-primary/5 hover:border-primary"
+                          : isDelayed
+                            ? "border-destructive/40 bg-destructive/5 hover:border-destructive"
                             : isCompleted
-                              ? "bg-primary/15 text-primary"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        <Icon className="size-4" />
+                              ? "border-border bg-card hover:border-border/80 hover:bg-muted/20"
+                              : "border-border/60 bg-muted/10 hover:border-border"
+                    }`}
+                  >
+                    {/* Top row: Phase + Status Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={`flex size-6 shrink-0 items-center justify-center rounded-xl ${
+                            isCompleted
+                              ? "bg-primary text-primary-foreground"
+                              : isCurrent
+                                ? "bg-primary/15 text-primary"
+                                : isDelayed
+                                  ? "bg-destructive/15 text-destructive"
+                                  : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <CheckIcon className="size-3.5 stroke-[2.5]" />
+                          ) : (
+                            <Icon className="size-3.5" />
+                          )}
+                        </div>
+                        <span className="text-xs font-semibold text-foreground/80 truncate">
+                          {milestone.phaseNumber || `Phase 0${index + 1}`}
+                        </span>
                       </div>
+
                       <Badge
                         variant={
-                          isCurrent
-                            ? "default"
-                            : isCompleted
-                              ? "secondary"
-                              : "outline"
+                          isCompleted
+                            ? "secondary"
+                            : isCurrent
+                              ? "default"
+                              : isDelayed
+                                ? "destructive"
+                                : "outline"
                         }
-                        className="text-[10px] font-semibold uppercase tracking-wider"
+                        className="text-[10px] font-medium h-5 px-1.5"
                       >
-                        {isCurrent ? "In Progress" : isCompleted ? "Completed" : "Upcoming"}
+                        {isCompleted
+                          ? "Delivered"
+                          : isDelayed
+                            ? "Delayed"
+                            : isCurrent
+                              ? "In Progress"
+                              : "Upcoming"}
                       </Badge>
                     </div>
 
-                    <div>
-                      <div className="flex items-baseline justify-between gap-1">
-                        <span className="text-[11px] font-semibold text-primary">
-                          Phase 0{index + 1}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground font-medium">
-                          {milestone.timeframe}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-sm text-foreground mt-0.5">
-                        {milestone.title}
-                      </h3>
-                    </div>
+                    {/* Middle: Title */}
+                    <p className="font-semibold text-sm text-foreground leading-snug truncate">
+                      {milestone.title}
+                    </p>
 
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {milestone.description}
+                    {/* Bottom: Date */}
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                      <CalendarIcon className="size-3 shrink-0" />
+                      <span className="truncate">{milestone.timeframe}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active Milestone Detail Banner */}
+            {activeMilestone ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border bg-muted/20 px-3.5 py-2.5 text-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                    {(() => {
+                      const Icon = activeMilestone.icon;
+                      return <Icon className="size-3" />;
+                    })()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-foreground truncate">
+                        {activeMilestone.phaseNumber}: {activeMilestone.title}
+                      </span>
+                      <span className="text-muted-foreground shrink-0">•</span>
+                      <span className="text-muted-foreground shrink-0 font-medium">
+                        Target: {activeMilestone.timeframe}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground truncate leading-relaxed">
+                      {activeMilestone.description}
                     </p>
                   </div>
-
-                  <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground flex items-center justify-between">
-                    <span>
-                      {isCompleted
-                        ? "Milestone completed"
-                        : isCurrent
-                          ? "Current active stage"
-                          : "Scheduled stage"}
-                    </span>
-                    {isCompleted ? (
-                      <CheckCircle2Icon className="size-3.5 text-primary" />
-                    ) : null}
-                  </div>
                 </div>
-              );
-            })}
+
+                <Badge
+                  variant={
+                    activeMilestone.status === "completed"
+                      ? "secondary"
+                      : activeMilestone.status === "delayed" || activeMilestone.isOverdue
+                        ? "destructive"
+                        : activeMilestone.status === "in_progress"
+                          ? "default"
+                          : "outline"
+                  }
+                  className="self-start sm:self-auto shrink-0 text-[10px] h-5 px-2 font-medium"
+                >
+                  {activeMilestone.status === "completed"
+                    ? "Delivered"
+                    : activeMilestone.status === "delayed" || activeMilestone.isOverdue
+                      ? "Delayed"
+                      : activeMilestone.status === "in_progress"
+                        ? "In Progress"
+                        : "Upcoming"}
+                </Badge>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
 
-      {/* Quick Navigation Bridge to Activity and Release Notes */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="border-dashed bg-muted/10">
-          <CardContent className="p-4 sm:p-5 flex flex-col justify-between h-full gap-4">
-            <div className="space-y-1">
-              <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <ActivityIcon className="size-4 text-primary" />
-                Project Member Activity
-              </h4>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Detailed breakdowns of daily work allocations, activity notes, and individual contributor updates.
-              </p>
+      {/* 3. Sprint Focus Areas & Effort Distribution */}
+      {effortBreakdown.length > 0 ? (
+        <Card className="border-border/80 shadow-xs">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <ActivityIcon className="size-4 text-primary" />
+                  Sprint Focus Areas
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Planned effort breakdown across core deliverables and disciplines.
+                </CardDescription>
+              </div>
+              <span className="text-xs text-muted-foreground self-start sm:self-auto font-medium">
+                Total Planned:{" "}
+                <strong className="text-foreground">{hours(totalPlannedHours)} hours</strong>
+              </span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateToTab("activity")}
-              className="w-full justify-between"
-            >
-              <span>Explore Member Activity</span>
-              <ArrowRightIcon className="size-3.5" data-icon="inline-end" />
-            </Button>
-          </CardContent>
-        </Card>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Multi-segment distribution bar */}
+            <div className="space-y-1.5">
+              <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted p-0.5 gap-0.5">
+                {effortBreakdown.map((item) => (
+                  <div
+                    key={item.activity}
+                    title={`${item.activity}: ${hours(item.hours)}h (${item.percentage}%)`}
+                    style={{ width: `${Math.max(item.percentage, 3)}%` }}
+                    className={`h-full rounded-full transition-all ${item.bgColor}`}
+                  />
+                ))}
+              </div>
+            </div>
 
-        <Card className="border-dashed bg-muted/10">
-          <CardContent className="p-4 sm:p-5 flex flex-col justify-between h-full gap-4">
-            <div className="space-y-1">
-              <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <FileTextIcon className="size-4 text-primary" />
-                Release Notes &amp; Deliverables
-              </h4>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Published release notes summarizing features, fixes, and improvements delivered in this version.
-              </p>
+            {/* Activity breakdown cards */}
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 pt-1">
+              {effortBreakdown.map((item) => (
+                <div
+                  key={item.activity}
+                  className="flex items-center justify-between rounded-2xl border bg-muted/20 p-3 space-x-3"
+                >
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`size-2 rounded-full shrink-0 ${item.bgColor}`} />
+                      <span className="text-xs font-semibold text-foreground truncate">
+                        {item.activity}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <span className="tabular-nums font-semibold text-foreground">{hours(item.hours)}h</span>
+                      <span>•</span>
+                      <span className="tabular-nums font-medium">{item.percentage}%</span>
+                      <span>•</span>
+                      <span>
+                        {item.contributors.length} member{item.contributors.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Interactive Contributor Avatars with Profile Popovers */}
+                  <ActivityContributorsGroup
+                    contributors={item.contributors}
+                    activityName={item.activity}
+                    activityTotalHours={item.hours}
+                    memberProfilesMap={memberProfilesMap}
+                  />
+                </div>
+              ))}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateToTab("release-notes")}
-              className="w-full justify-between"
-            >
-              <span>View Release Notes</span>
-              <ArrowRightIcon className="size-3.5" data-icon="inline-end" />
-            </Button>
           </CardContent>
         </Card>
-      </div>
+      ) : null}
     </div>
   );
 }

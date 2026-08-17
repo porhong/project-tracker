@@ -2,19 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { requireViewer } from "@/lib/auth/guards";
-import { workingDaysLabel } from "@/lib/sprint-config";
-import { CalendarIcon, ClockIcon, TrendingUpIcon, UsersIcon } from "lucide-react";
-import { ProjectSwitcher } from "../_components/project-switcher";
 import { createClient } from "@/lib/supabase/server";
-import { ClientOverviewSelector } from "./_components/client-overview-selector";
+import { ClientOverviewHeaderControls } from "./_components/client-overview-header-controls";
 import { MemberActivityExplorer } from "./_components/member-activity-explorer";
 import { OverviewTabs } from "./_components/overview-tabs";
 import { ReleaseNotesFeed } from "./_components/release-notes-feed";
@@ -22,6 +12,7 @@ import { SprintTimeline } from "./_components/sprint-timeline";
 import type {
   ClientReleaseSprint,
   ClientSprint,
+  ClientSprintMilestone,
   ClientSprintProgress,
   PlannedAllocation,
 } from "./types";
@@ -37,19 +28,6 @@ type ClientOverviewPageProps = {
   }>;
 };
 
-const dateFormat = new Intl.DateTimeFormat("en", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
-
-const hours = (value: number) =>
-  value.toLocaleString("en", { maximumFractionDigits: 2 });
-
-function formatDate(value: string) {
-  return dateFormat.format(new Date(`${value}T00:00:00Z`));
-}
-
 function isPlannedAllocation(value: unknown): value is PlannedAllocation {
   return (
     typeof value === "object" &&
@@ -63,10 +41,6 @@ function isPlannedAllocation(value: unknown): value is PlannedAllocation {
 
 function allocations(value: ClientSprintProgress["planned_allocations"]) {
   return Array.isArray(value) ? value.filter(isPlannedAllocation) : [];
-}
-
-function sprintStatusVariant(status: string) {
-  return status === "active" ? "default" : "secondary";
 }
 
 function hasReleaseNoteContent(value: unknown): boolean {
@@ -142,7 +116,16 @@ export async function ClientOverview({
     }),
   ]);
 
-  const error = releaseResult.error ?? progressResult.error;
+  const sprintIds = (releaseResult.data ?? []).map((sprint) => sprint.id);
+  const { data: milestonesResult, error: milestonesError } = sprintIds.length
+    ? await supabase
+        .from("sprint_milestones")
+        .select("id, sprint_id, title, description, target_date, status, icon, order_index")
+        .in("sprint_id", sprintIds)
+        .order("order_index", { ascending: true })
+    : { data: [], error: null };
+
+  const error = releaseResult.error ?? progressResult.error ?? milestonesError;
   if (error) {
     return (
       <Alert variant="destructive">
@@ -153,6 +136,7 @@ export async function ClientOverview({
     );
   }
 
+  const allMilestones = (milestonesResult ?? []) as ClientSprintMilestone[];
   const progressRows = (progressResult.data ?? []) as ClientSprintProgress[];
   const releaseSprints: ClientReleaseSprint[] = (releaseResult.data ?? [])
     .filter((sprint) => hasReleaseNoteContent(sprint.release_notes))
@@ -208,6 +192,9 @@ export async function ClientOverview({
   const selectedSprintRows = selectedSprint
     ? progressRows.filter((row) => row.sprint_id === selectedSprint.id)
     : [];
+  const selectedSprintMilestones = selectedSprint
+    ? allMilestones.filter((m) => m.sprint_id === selectedSprint.id)
+    : [];
   const plannedHours = selectedSprintRows.reduce(
     (total, row) =>
       total + allocations(row.planned_allocations).reduce((sum, item) => sum + item.hours, 0),
@@ -229,163 +216,46 @@ export async function ClientOverview({
               "Follow project releases and the team’s sprint activity."}
           </p>
         </div>
-        <ProjectSwitcher projects={projects ?? []} />
+        <ClientOverviewHeaderControls
+          projects={projects ?? []}
+          visibleSprints={visibleSprints}
+          selectedSprintId={selectedSprint?.id ?? null}
+        />
       </header>
 
       <OverviewTabs
         sprintTimeline={
-          <section className="space-y-6" aria-labelledby="sprint-timeline-heading">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <h2 id="sprint-timeline-heading" className="text-xl font-semibold">
-                  Sprint timeline &amp; milestones
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Track schedule, current progress, milestones, and team capacity for this sprint period.
-                </p>
-              </div>
-              {visibleSprints.length > 0 ? (
-                <ClientOverviewSelector
-                  sprints={visibleSprints}
-                  selectedSprintId={selectedSprint?.id ?? null}
-                />
-              ) : null}
-            </div>
-
-            {!selectedSprint ? (
-              <Alert>
-                <AlertDescription>
-                  No active or completed sprint is available for this project yet.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <SprintTimeline
-                sprint={selectedSprint}
-                progressRows={selectedSprintRows}
-                totalPlannedHours={plannedHours}
-              />
-            )}
-          </section>
+          !selectedSprint ? (
+            <Alert>
+              <AlertDescription>
+                No active or completed sprint is available for this project yet.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <SprintTimeline
+              sprint={selectedSprint}
+              progressRows={selectedSprintRows}
+              totalPlannedHours={plannedHours}
+              milestones={selectedSprintMilestones}
+            />
+          )
         }
         activity={
-          <section className="space-y-6" aria-labelledby="sprint-activity-heading">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <h2 id="sprint-activity-heading" className="text-xl font-semibold">
-                  Project member activity
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Planned allocation and reported activity for the selected sprint.
-                </p>
-              </div>
-              {visibleSprints.length > 0 ? (
-                <ClientOverviewSelector
-                  sprints={visibleSprints}
-                  selectedSprintId={selectedSprint?.id ?? null}
-                />
-              ) : null}
-            </div>
-
-            {!selectedSprint ? (
-              <Alert>
-                <AlertDescription>
-                  No active or completed sprint is available for this project yet.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <>
-                <Card>
-                  <CardHeader className="pb-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <CardTitle className="text-lg">
-                          Sprint #{selectedSprint.sprint_number}
-                        </CardTitle>
-                        <CardDescription>
-                          {selectedSprint.version} · {formatDate(selectedSprint.start_date)} —{" "}
-                          {formatDate(selectedSprint.end_date)}
-                        </CardDescription>
-                      </div>
-                      <Badge variant={sprintStatusVariant(selectedSprint.status)}>
-                        {selectedSprint.status === "active" ? "Active sprint" : "Completed sprint"}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-0">
-                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                        <UsersIcon className="size-3.5 text-primary" />
-                        <span>Team Members</span>
-                      </div>
-                      <p className="text-2xl font-semibold tabular-nums text-foreground">
-                        {selectedSprintRows.length}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Assigned to sprint
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                        <ClockIcon className="size-3.5 text-primary" />
-                        <span>Total Planned Effort</span>
-                      </div>
-                      <p className="text-2xl font-semibold tabular-nums text-foreground">
-                        {hours(plannedHours)}h
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Across all activities
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                        <CalendarIcon className="size-3.5 text-primary" />
-                        <span>Working Days</span>
-                      </div>
-                      <p className="text-sm font-semibold leading-tight pt-1 text-foreground">
-                        {workingDaysLabel(selectedSprint.working_days)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Sprint schedule
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border bg-muted/20 p-3.5 space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                        <TrendingUpIcon className="size-3.5 text-primary" />
-                        <span>Daily Capacity</span>
-                      </div>
-                      <p className="text-2xl font-semibold tabular-nums text-foreground">
-                        {hours(selectedSprint.daily_work_hours)}h
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Per person / work day
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <MemberActivityExplorer
-                  sprint={selectedSprint}
-                  progressRows={selectedSprintRows}
-                  totalPlannedHours={plannedHours}
-                />
-              </>
-            )}
-          </section>
+          !selectedSprint ? (
+            <Alert>
+              <AlertDescription>
+                No active or completed sprint is available for this project yet.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <MemberActivityExplorer
+              sprint={selectedSprint}
+              progressRows={selectedSprintRows}
+              totalPlannedHours={plannedHours}
+            />
+          )
         }
-        releaseNotes={
-          <section className="space-y-6" aria-labelledby="release-notes-heading">
-            <div className="space-y-1">
-              <h2 id="release-notes-heading" className="text-xl font-semibold">
-                Release notes
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Current and completed sprint releases grouped by sprint and version.
-              </p>
-            </div>
-
-            <ReleaseNotesFeed releases={releaseSprints} />
-          </section>
-        }
+        releaseNotes={<ReleaseNotesFeed releases={releaseSprints} />}
       />
     </div>
   );
