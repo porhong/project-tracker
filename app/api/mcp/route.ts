@@ -25,6 +25,46 @@ function withCors(response: Response): Response {
   });
 }
 
+type JsonRpcMessage = {
+  jsonrpc?: unknown;
+  id?: unknown;
+  method?: unknown;
+  params?: unknown;
+  result?: unknown;
+  error?: unknown;
+};
+
+function normalizeMcpMessage(message: JsonRpcMessage): JsonRpcMessage {
+  if (
+    message &&
+    typeof message === "object" &&
+    !Array.isArray(message) &&
+    message.params === null
+  ) {
+    return { ...message, params: {} };
+  }
+  return message;
+}
+
+async function parseMcpBody(
+  request: Request,
+): Promise<unknown | undefined> {
+  if (request.method !== "POST") return undefined;
+  const ct = request.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) return undefined;
+
+  try {
+    const raw = await request.clone().json();
+    return Array.isArray(raw)
+      ? raw.map(normalizeMcpMessage)
+      : normalizeMcpMessage(raw);
+  } catch {
+    // Leave parsing to the transport so it can emit the canonical JSON-RPC
+    // parse error response.
+    return undefined;
+  }
+}
+
 /**
  * Admin MCP endpoint (Streamable HTTP, stateless). Each request builds a
  * fresh server + transport, so nothing is shared between requests. Access
@@ -50,7 +90,8 @@ async function handle(request: Request): Promise<Response> {
 
   try {
     await server.connect(transport);
-    return withCors(await transport.handleRequest(request));
+    const parsedBody = await parseMcpBody(request);
+    return withCors(await transport.handleRequest(request, { parsedBody }));
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "MCP request failed.";
