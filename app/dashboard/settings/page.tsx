@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requireAdmin } from "@/lib/auth/guards";
+import { loadMcpSkillPackage } from "@/lib/mcp/load-skill-package";
 import { createClient } from "@/lib/supabase/server";
 import { ActivityManager } from "./_components/activity-manager";
 import { McpAccessCard } from "./_components/mcp-access-card";
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
     { data: settings, error: settingsError },
     { data: activities, error: activitiesError },
     { data: mcpTokens, error: mcpTokensError },
+    skillPackage,
   ] = await Promise.all([
     supabase
       .from("workspace_settings")
@@ -40,6 +42,7 @@ export default async function SettingsPage() {
       )
       .eq("user_id", admin.id)
       .order("created_at", { ascending: false }),
+    loadMcpSkillPackage(),
   ]);
   const error = settingsError ?? activitiesError;
 
@@ -58,7 +61,11 @@ export default async function SettingsPage() {
       </AlertDescription>
     </Alert>
   ) : (
-    <McpAccessCard endpointUrl={endpointUrl} tokens={mcpTokens ?? []} />
+    <McpAccessCard
+      endpointUrl={endpointUrl}
+      tokens={mcpTokens ?? []}
+      skillPackage={skillPackage}
+    />
   );
 
   return (

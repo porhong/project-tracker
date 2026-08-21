@@ -12,7 +12,8 @@ endpoint so AI agents can manage **projects**, **sprints**, and **users**.
 | Tools | 19 (see [Tool reference](#tool-reference)) |
 
 Implementation lives under `app/api/mcp/route.ts` and `lib/mcp/`. Agent notes for
-contributors are in `AGENTS.md`.
+contributors are in `AGENTS.md`. Agent **usage** skill (connect + call tools):
+[`.claude/skills/project-tracker-mcp/`](../.claude/skills/project-tracker-mcp/).
 
 ---
 
