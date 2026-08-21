@@ -53,6 +53,31 @@ async function assertNotLastActiveAdmin(
   return null;
 }
 
+async function assertNoSprintRecords(
+  client: ServiceClient,
+  userId: string,
+): Promise<string | null> {
+  const [{ count: allocations }, { count: timeOff }, { count: notes }] =
+    await Promise.all([
+      client
+        .from("sprint_member_allocations")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+      client
+        .from("sprint_member_time_off")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+      client
+        .from("sprint_member_activity_notes")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+    ]);
+  if ((allocations ?? 0) + (timeOff ?? 0) + (notes ?? 0) > 0) {
+    return "Cannot delete this user because they have sprint capacity or activity records. Suspend the account instead, or remove those records first.";
+  }
+  return null;
+}
+
 export function registerUserTools(server: McpServer, ctx: ToolContext) {
   const { admin, client } = ctx;
 
@@ -323,7 +348,7 @@ export function registerUserTools(server: McpServer, ctx: ToolContext) {
     {
       title: "Delete user",
       description:
-        "Permanently delete a user, their profile, and their stored profile photo. Admins cannot delete themselves, and the last active administrator cannot be deleted. Requires confirm: true. Admin only.",
+        "Permanently delete a user, their profile, and their stored profile photo. Admins cannot delete themselves, the last active administrator cannot be deleted, and users with sprint plan records cannot be deleted (suspend them instead). Requires confirm: true. Admin only.",
       inputSchema: {
         id: z.string().uuid(),
         confirm: z
@@ -336,6 +361,9 @@ export function registerUserTools(server: McpServer, ctx: ToolContext) {
 
       const blocked = await assertNotLastActiveAdmin(client, id, "delete");
       if (blocked) return fail(blocked);
+
+      const sprintBlocked = await assertNoSprintRecords(client, id);
+      if (sprintBlocked) return fail(sprintBlocked);
 
       const { data: profile, error: profileError } = await client
         .from("profiles")

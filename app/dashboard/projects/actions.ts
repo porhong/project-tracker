@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; warning?: string }
+  | { ok: false; error: string };
 
 function fail(error: string): ActionResult {
   return { ok: false, error };
@@ -123,6 +125,39 @@ export async function assignProjectMember(
   return { ok: true };
 }
 
+async function hasSprintRecordsForUser(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data: sprints } = await supabase
+    .from("sprints")
+    .select("id")
+    .eq("project_id", projectId);
+  const sprintIds = (sprints ?? []).map((sprint) => sprint.id);
+  if (sprintIds.length === 0) return false;
+
+  const [{ count: allocations }, { count: timeOff }, { count: notes }] =
+    await Promise.all([
+      supabase
+        .from("sprint_member_allocations")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .in("sprint_id", sprintIds),
+      supabase
+        .from("sprint_member_time_off")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .in("sprint_id", sprintIds),
+      supabase
+        .from("sprint_member_activity_notes")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .in("sprint_id", sprintIds),
+    ]);
+  return (allocations ?? 0) + (timeOff ?? 0) + (notes ?? 0) > 0;
+}
+
 export async function removeProjectMember(
   projectId: string,
   userId: string,
@@ -130,6 +165,9 @@ export async function removeProjectMember(
   await requireAdmin();
   if (!projectId || !userId) return fail("Missing project member.");
   const supabase = await createClient();
+
+  const hasRecords = await hasSprintRecordsForUser(supabase, projectId, userId);
+
   const { error } = await supabase
     .from("project_members")
     .delete()
@@ -137,5 +175,10 @@ export async function removeProjectMember(
     .eq("user_id", userId);
   if (error) return fail(error.message);
   revalidate();
-  return { ok: true };
+  return {
+    ok: true,
+    warning: hasRecords
+      ? "Member removed. Their existing sprint plan records remain intact and will be preserved on future plan saves."
+      : undefined,
+  };
 }

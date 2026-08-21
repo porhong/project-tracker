@@ -486,6 +486,48 @@ try {
   });
   record("update_sprint", !isError(result), detail(result));
 
+  // Preserve-plan / delete-user guards need a sprint plan row for the user.
+  result = await call("add_project_member", {
+    project_id: projectId,
+    user_id: createdUserId,
+  });
+  record(
+    "re-add project member before plan guards",
+    !isError(result),
+    detail(result),
+  );
+
+  const { error: noteError } = await service
+    .from("sprint_member_activity_notes")
+    .insert({
+      sprint_id: secondSprintId,
+      user_id: createdUserId,
+      activity: "verify-mcp",
+      note: "guardrail fixture",
+    });
+  record(
+    "seed sprint activity note for delete/remove guards",
+    !noteError,
+    noteError?.message ?? "",
+  );
+
+  result = await call("delete_user", { id: createdUserId, confirm: true });
+  record(
+    "delete_user blocks users with sprint plan records",
+    isError(result) && text(result).includes("sprint capacity or activity"),
+    detail(result),
+  );
+
+  result = await call("remove_project_member", {
+    project_id: projectId,
+    user_id: createdUserId,
+  });
+  record(
+    "remove_project_member preserves sprint plan records",
+    !isError(result) && payload(result).preserved_plan_records === true,
+    detail(result),
+  );
+
   // --- Destructive guardrails ------------------------------------------------
   result = await call("delete_sprint", { id: firstSprintId });
   record("delete_sprint requires confirm", isError(result), detail(result));
