@@ -8,6 +8,39 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+# MCP: admin endpoint at `/api/mcp`
+
+Usage guide for clients and operators: [`docs/mcp.md`](docs/mcp.md).
+
+A stateless Streamable HTTP MCP server lets AI agents manage projects,
+sprints, and users (admin only). Route: `app/api/mcp/route.ts` — a fresh
+`McpServer` + `WebStandardStreamableHTTPServerTransport`
+(`sessionIdGenerator: undefined`, `enableJsonResponse: true`) per request.
+
+- **Auth.** `Authorization: Bearer <token>`, verified in `lib/mcp/auth.ts`
+  (`requireMcpAdmin`). Accepts a long-lived `ptmcp_…` personal access token
+  (~30 days, hashed in `mcp_access_tokens`) or a short-lived Supabase Auth JWT
+  (~1 h). The `profiles` row is re-read — only `role='admin'` **and**
+  `status='active'` pass. `lib/supabase/proxy.ts` returns early for `/api/mcp`;
+  never route it through the cookie session flow.
+- **Tools.** Registered in `lib/mcp/server.ts`; handlers live in
+  `lib/mcp/tools/{projects,sprints,users}.ts`. They use zod input schemas
+  (zod is the MCP SDK's peer dep — do not introduce zod into the dashboard
+  actions, which stay hand-validated) and run on the service-role client, so
+  every handler must mirror the validation and guardrails of the matching
+  `app/dashboard/*/actions.ts` action (active-project checks, sprint status
+  transitions, one-active-sprint-per-project, last-active-admin and
+  self-lockout guards). Destructive tools take `confirm: z.literal(true)`.
+- **Adding a tool.** Register it in the matching `lib/mcp/tools/*.ts` file,
+  reusing `ok`/`fail` from `lib/mcp/result.ts`, then cover it in
+  `scripts/verify-mcp.ts` and bump the tool-count assertion there.
+- **Client token.** Prefer **Settings → AI agents (MCP)** to create a 30-day
+  token, or `bun run mcp:token <email> <password>` (same). Do not add new env
+  vars — the endpoint reuses `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SECRET_KEY`.
+- **Verify.** `bun run typecheck && bun run lint && bun run build` and
+  `bun run verify:mcp` (spins the server up over `InMemoryTransport` with a
+  throwaway admin; self-cleaning).
+
 # UI: shadcn preset `b2qKnttz6` + brand primary
 
 All UI in this project comes from one shadcn preset, re-applied with:

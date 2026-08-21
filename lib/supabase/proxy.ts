@@ -4,6 +4,13 @@ import { isAdminPath, isPublicPath, readRoleClaims } from "@/lib/auth/roles";
 import type { Database } from "./database.types";
 
 export async function updateSession(request: NextRequest) {
+  // The MCP endpoint authenticates with a Bearer token and enforces the admin
+  // check itself (see app/api/mcp/route.ts) -- the cookie session flow would
+  // just redirect token clients to /login.
+  if (request.nextUrl.pathname === "/api/mcp") {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });

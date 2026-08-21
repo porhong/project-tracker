@@ -20,6 +20,20 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Admin MCP server
+
+AI agents can manage projects, sprints, and users via a Streamable HTTP MCP
+endpoint at `/api/mcp` (**active admin** Bearer token required — prefer a
+30-day `ptmcp_…` token from Settings or `bun run mcp:token`).
+
+```bash
+bun run mcp:token <admin-email> <password>
+```
+
+Full setup, client config, tool reference, guardrails, and troubleshooting:
+**[docs/mcp.md](docs/mcp.md)**. Run `bun run verify:mcp` to smoke-test the tool
+surface.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
