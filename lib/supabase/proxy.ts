@@ -118,7 +118,13 @@ export async function updateSession(request: NextRequest) {
     if (profile && profile.role !== role) {
       await supabase.auth.refreshSession();
       const { data: refreshed } = await supabase.auth.getClaims();
-      effectiveRole = readRoleClaims(refreshed?.claims).role;
+      // The refreshed claim wins when present (the access-token hook re-ran
+      // during the refresh). Fall back to the profile row when the token
+      // carries no role claim at all -- e.g. the hook is not enabled on the
+      // project, where every JWT lacks user_role and admins would otherwise
+      // be bounced off admin paths as forbidden forever. The row is the same
+      // source of truth requireProfile() authorizes from.
+      effectiveRole = readRoleClaims(refreshed?.claims).role ?? profile.role;
     }
   }
 

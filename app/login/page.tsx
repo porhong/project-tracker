@@ -16,6 +16,7 @@ export const metadata: Metadata = {
 const NOTICES: Record<string, string> = {
   suspended: "This account has been suspended. Contact an administrator.",
   forbidden: "You do not have access to that page.",
+  "no-profile": "Your account profile is missing. Contact an administrator.",
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
