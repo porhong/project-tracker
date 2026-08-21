@@ -274,6 +274,31 @@ export async function setUserStatus(
   return { ok: true };
 }
 
+async function assertNoSprintRecords(
+  admin: AdminClient,
+  userId: string,
+): Promise<string | null> {
+  const [{ count: allocations }, { count: timeOff }, { count: notes }] =
+    await Promise.all([
+      admin
+        .from("sprint_member_allocations")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+      admin
+        .from("sprint_member_time_off")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+      admin
+        .from("sprint_member_activity_notes")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+    ]);
+  if ((allocations ?? 0) + (timeOff ?? 0) + (notes ?? 0) > 0) {
+    return "Cannot delete this user because they have sprint capacity or activity records. Suspend the account instead, or remove those records first.";
+  }
+  return null;
+}
+
 export async function deleteUser(id: string): Promise<ActionResult> {
   const me = await requireAdmin();
 
@@ -283,6 +308,9 @@ export async function deleteUser(id: string): Promise<ActionResult> {
   const admin = createAdminClient();
   const blocked = await assertNotLastActiveAdmin(admin, id, "delete");
   if (blocked) return fail(blocked);
+
+  const sprintBlocked = await assertNoSprintRecords(admin, id);
+  if (sprintBlocked) return fail(sprintBlocked);
 
   const { data: profile, error: profileError } = await admin
     .from("profiles")

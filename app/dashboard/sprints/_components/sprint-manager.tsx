@@ -171,7 +171,7 @@ export function SprintManager({
                 <TableRow key={sprint.id}>
                   <TableCell>
                     <p className="font-medium">Sprint #{sprint.sprint_number}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="max-w-xl truncate text-xs text-muted-foreground">
                       {sprint.version}
                       {sprint.description ? ` · ${sprint.description}` : ""}
                       {sprintMilestones.length > 0

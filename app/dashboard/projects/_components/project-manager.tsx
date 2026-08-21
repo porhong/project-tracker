@@ -166,6 +166,8 @@ function ProjectMembersDialog({
       if (!result.ok) {
         toast.error(result.error);
         setRemovalError(result.error);
+      } else if (result.warning) {
+        toast.success(result.warning);
       } else {
         toast.success("User removed from project.");
       }
@@ -178,7 +180,9 @@ function ProjectMembersDialog({
         <DialogHeader>
           <DialogTitle>Members · {project.name}</DialogTitle>
           <DialogDescription>
-            Assign active users to this project. Removing an assignment does not remove the user account.
+            Assign active users to this project. Removing an assignment does not
+            remove the user account, and any sprint plan records they already
+            have stay in place.
           </DialogDescription>
         </DialogHeader>
 

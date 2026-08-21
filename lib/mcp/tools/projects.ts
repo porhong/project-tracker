@@ -256,20 +256,58 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext) {
     "remove_project_member",
     {
       title: "Remove project member",
-      description: "Remove a user from a project. Admin only.",
+      description:
+        "Remove a user from a project. Existing sprint plan records for that user are preserved. Admin only.",
       inputSchema: {
         project_id: z.string().uuid(),
         user_id: z.string().uuid(),
       },
     },
     async ({ project_id, user_id }) => {
+      const { data: sprints } = await client
+        .from("sprints")
+        .select("id")
+        .eq("project_id", project_id);
+      const sprintIds = (sprints ?? []).map((sprint) => sprint.id);
+      let preservedPlanRecords = false;
+      if (sprintIds.length > 0) {
+        const [{ count: allocations }, { count: timeOff }, { count: notes }] =
+          await Promise.all([
+            client
+              .from("sprint_member_allocations")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", user_id)
+              .in("sprint_id", sprintIds),
+            client
+              .from("sprint_member_time_off")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", user_id)
+              .in("sprint_id", sprintIds),
+            client
+              .from("sprint_member_activity_notes")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", user_id)
+              .in("sprint_id", sprintIds),
+          ]);
+        preservedPlanRecords =
+          (allocations ?? 0) + (timeOff ?? 0) + (notes ?? 0) > 0;
+      }
+
       const { error } = await client
         .from("project_members")
         .delete()
         .eq("project_id", project_id)
         .eq("user_id", user_id);
       if (error) return fail(error.message);
-      return ok({ project_id, user_id, removed: true });
+      return ok({
+        project_id,
+        user_id,
+        removed: true,
+        preserved_plan_records: preservedPlanRecords,
+        warning: preservedPlanRecords
+          ? "Member removed. Their existing sprint plan records remain intact and will be preserved on future plan saves."
+          : undefined,
+      });
     },
   );
 }

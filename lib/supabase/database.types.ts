@@ -138,6 +138,55 @@ export type Database = {
         }
         Relationships: []
       }
+      project_member_history: {
+        Row: {
+          action: string
+          id: string
+          performed_at: string
+          performed_by: string | null
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_member_history_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_member_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_member_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_members: {
         Row: {
           created_at: string
