@@ -67,8 +67,15 @@ export const requireProfile = cache(async (): Promise<CurrentUser> => {
     .eq("id", user.id)
     .single();
 
-  if (error || !profile) redirect("/login");
-  if (profile.status === "suspended") redirect("/login?error=suspended");
+  // Both failure exits go through the sign-out route handler rather than
+  // straight to /login. The session is still valid here -- the proxy let the
+  // request through on the strength of the JWT claims -- and the proxy bounces
+  // any signed-in user from /login back to /dashboard. Redirecting to /login
+  // directly therefore loops forever (ERR_TOO_MANY_REDIRECTS); ending the
+  // session first guarantees /login actually renders.
+  if (error || !profile) redirect("/auth/sign-out?error=no-profile");
+  if (profile.status === "suspended")
+    redirect("/auth/sign-out?error=suspended");
 
   return {
     ...user,

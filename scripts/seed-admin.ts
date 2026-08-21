@@ -68,10 +68,21 @@ async function main() {
 
     // GoTrue applies custom app_metadata after the auth.users insert, so the
     // on_auth_user_created trigger defaulted the profile to 'viewer'. Promote.
-    const { error: promoteError } = await admin
-      .from("profiles")
-      .update({ role: "admin", status: "active" })
-      .eq("id", data.user!.id);
+    // Upsert, not update: if the profile row is missing entirely (e.g. the
+    // public schema was rebuilt while auth.users survived), an update matches
+    // zero rows and PostgREST still reports success -- the login then
+    // redirect-loops because requireProfile() finds no profile for a valid
+    // session.
+    const { error: promoteError } = await admin.from("profiles").upsert(
+      {
+        id: data.user!.id,
+        email,
+        full_name: "Administrator",
+        role: "admin",
+        status: "active",
+      },
+      { onConflict: "id" },
+    );
     if (promoteError) throw promoteError;
 
     console.log(`Created admin ${email} (${data.user?.id}).`);
@@ -85,10 +96,19 @@ async function main() {
   );
   if (authError) throw authError;
 
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({ role: "admin", status: "active" })
-    .eq("id", existing.id);
+  // Same upsert reasoning as the create path above.
+  const { error: profileError } = await admin.from("profiles").upsert(
+    {
+      id: existing.id,
+      email,
+      full_name:
+        (existing.user_metadata?.full_name as string | undefined) ??
+        "Administrator",
+      role: "admin",
+      status: "active",
+    },
+    { onConflict: "id" },
+  );
   if (profileError) throw profileError;
 
   console.log(`Admin ${email} already exists (${existing.id}); role reset to admin.`);
