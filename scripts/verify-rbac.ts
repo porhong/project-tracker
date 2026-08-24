@@ -95,15 +95,25 @@ try {
   userId = userCreated.user!.id;
 
   // Mirrors what the app's createUser action does: set the role explicitly,
-  // because GoTrue applies app_metadata after the auth.users insert.
-  await admin.from("profiles").update({ role: "admin" }).eq("id", adminId);
-  await admin.from("profiles").update({ role: "viewer" }).eq("id", viewerId);
-  await admin.from("profiles").update({ role: "user" }).eq("id", userId);
+  // because GoTrue applies app_metadata after the auth.users insert. Only
+  // viewer/user accounts are forced to change their password on first sign-in.
+  await admin
+    .from("profiles")
+    .update({ role: "admin", force_password_change: false })
+    .eq("id", adminId);
+  await admin
+    .from("profiles")
+    .update({ role: "viewer", force_password_change: true })
+    .eq("id", viewerId);
+  await admin
+    .from("profiles")
+    .update({ role: "user", force_password_change: true })
+    .eq("id", userId);
 
   // 3. Trigger populated profiles with the right roles.
   const { data: profiles } = await admin
     .from("profiles")
-    .select("id, email, full_name, role, status")
+    .select("id, email, full_name, role, status, force_password_change")
     .in("id", [adminId, viewerId, userId]);
   const adminProfile = profiles?.find((p) => p.id === adminId);
   const viewerProfile = profiles?.find((p) => p.id === viewerId);
@@ -114,6 +124,13 @@ try {
       viewerProfile?.role === "viewer" &&
       userProfile?.role === "user",
     `admin=${adminProfile?.role} viewer=${viewerProfile?.role} user=${userProfile?.role}`,
+  );
+  record(
+    "viewer and user are forced to change password; admin is not",
+    adminProfile?.force_password_change === false &&
+      viewerProfile?.force_password_change === true &&
+      userProfile?.force_password_change === true,
+    `adminForce=${adminProfile?.force_password_change} viewerForce=${viewerProfile?.force_password_change} userForce=${userProfile?.force_password_change}`,
   );
 
   // 4. Sign in and inspect the JWT for the hook's claims.

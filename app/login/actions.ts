@@ -19,12 +19,31 @@ export async function signIn(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data: signInData, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-  if (error) {
+  if (error || !signInData.user) {
     // Supabase returns the same error for a wrong password and a banned
     // account, so keep the message generic rather than confirming which.
     return { error: "Incorrect email or password, or the account is suspended." };
+  }
+
+  // Force viewer/user accounts to change an admin-provisioned password on first
+  // sign-in before they can reach the dashboard.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, force_password_change")
+    .eq("id", signInData.user.id)
+    .single();
+
+  if (
+    profile?.force_password_change &&
+    (profile.role === "viewer" || profile.role === "user")
+  ) {
+    revalidatePath("/", "layout");
+    redirect("/dashboard/change-password?forced=1");
   }
 
   revalidatePath("/", "layout");

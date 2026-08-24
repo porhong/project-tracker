@@ -379,7 +379,13 @@ export function registerSprintTools(server: McpServer, ctx: ToolContext) {
         return fail("Completed or archived sprint release notes are read-only.");
       }
 
-      const parsed = parseReleaseNotes(JSON.stringify(release_notes));
+      // Agents may send the document as a JSON object or as a serialized JSON
+      // string. Normalize to a string before validating.
+      const releaseNotesValue =
+        typeof release_notes === "string"
+          ? release_notes
+          : JSON.stringify(release_notes);
+      const parsed = parseReleaseNotes(releaseNotesValue);
       if ("error" in parsed) return fail(parsed.error);
 
       const { data, error } = await client

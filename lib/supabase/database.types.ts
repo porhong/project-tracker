@@ -108,6 +108,7 @@ export type Database = {
           competency: string | null
           created_at: string
           email: string
+          force_password_change: boolean
           full_name: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
@@ -119,6 +120,7 @@ export type Database = {
           competency?: string | null
           created_at?: string
           email: string
+          force_password_change?: boolean
           full_name?: string | null
           id: string
           role?: Database["public"]["Enums"]["app_role"]
@@ -130,6 +132,7 @@ export type Database = {
           competency?: string | null
           created_at?: string
           email?: string
+          force_password_change?: boolean
           full_name?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]

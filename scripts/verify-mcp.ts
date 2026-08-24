@@ -669,10 +669,23 @@ try {
   });
   record("set_sprint_release_notes", !isError(result), detail(result));
 
+  result = await call("set_sprint_release_notes", {
+    id: secondSprintId,
+    release_notes: JSON.stringify({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "verify-mcp-string" }] }],
+    }),
+  });
+  record(
+    "set_sprint_release_notes accepts a JSON string",
+    !isError(result),
+    detail(result),
+  );
+
   result = await call("get_sprint", { id: secondSprintId });
   record(
     "get_sprint includes release notes",
-    !isError(result) && text(result).includes("verify-mcp"),
+    !isError(result) && text(result).includes("verify-mcp-string"),
   );
 
   result = await call("set_sprint_milestones", {

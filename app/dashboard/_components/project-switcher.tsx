@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MarqueeLabel } from "./marquee-label";
 
 type ProjectOption = {
   id: string;
@@ -36,8 +37,18 @@ export function ProjectSwitcher({ projects }: { projects: ProjectOption[] }) {
   return (
     <div className="w-full sm:w-64">
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button id="dashboard-project" variant="outline" className="w-full justify-between bg-input/50 hover:bg-input/70" disabled={isPending} />}>
-          {selectedProject?.name ?? "Select project"}<ChevronDownIcon data-icon="inline-end" />
+        <DropdownMenuTrigger
+          render={
+            <Button
+              id="dashboard-project"
+              variant="outline"
+              className="w-full min-w-0 justify-between overflow-hidden bg-input/50 hover:bg-input/70"
+              disabled={isPending}
+            />
+          }
+        >
+          <MarqueeLabel>{selectedProject?.name ?? "Select project"}</MarqueeLabel>
+          <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {projects.map((project) => (

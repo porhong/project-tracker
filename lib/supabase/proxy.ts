@@ -104,18 +104,20 @@ export async function updateSession(request: NextRequest) {
   //   demoted -- the claim still says admin, and RLS reads the claim rather
   //     than the row, so it keeps granting reads the profile no longer allows.
   //
-  // Refreshing re-runs the access-token hook and settles both. The profile read
-  // costs one indexed lookup, and only for admin claims or admin paths.
+  // Refreshing re-runs the access-token hook and settles both. We also read
+  // force_password_change here so viewer/user accounts are redirected to the
+  // change-password page immediately after an admin reset.
   let effectiveRole = role;
+  let forcePasswordChange = false;
 
-  if (role === "admin" || isAdminPath(pathname)) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", claims.sub)
-      .single();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, force_password_change")
+    .eq("id", claims.sub)
+    .single();
 
-    if (profile && profile.role !== role) {
+  if (profile) {
+    if (profile.role !== role) {
       await supabase.auth.refreshSession();
       const { data: refreshed } = await supabase.auth.getClaims();
       // The refreshed claim wins when present (the access-token hook re-ran
@@ -126,10 +128,21 @@ export async function updateSession(request: NextRequest) {
       // source of truth requireProfile() authorizes from.
       effectiveRole = readRoleClaims(refreshed?.claims).role ?? profile.role;
     }
+    forcePasswordChange = profile.force_password_change ?? false;
   }
 
   if (isAdminPath(pathname) && effectiveRole !== "admin") {
     return redirectTo("/dashboard", { error: "forbidden" });
+  }
+
+  // Non-admin users with a pending password change must complete it before
+  // using the dashboard. The change-password page itself must stay reachable.
+  if (
+    forcePasswordChange &&
+    (effectiveRole === "viewer" || effectiveRole === "user") &&
+    pathname !== "/dashboard/change-password"
+  ) {
+    return redirectTo("/dashboard/change-password", { forced: "1" });
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
