@@ -9,7 +9,7 @@ endpoint so AI agents can manage **projects**, **sprints**, and **users**.
 | Transport | Streamable HTTP, **stateless** (JSON responses, no session sticky) |
 | Auth | `Authorization: Bearer <ptmcp_…>` (30-day PAT) or a short-lived Supabase JWT |
 | Who | Active profile with `role = admin` only |
-| Tools | 19 (see [Tool reference](#tool-reference)) |
+| Tools | 27 (see [Tool reference](#tool-reference)) |
 
 Implementation lives under `app/api/mcp/route.ts` and `lib/mcp/`. Agent notes for
 contributors are in `AGENTS.md`. Agent **usage** skill (connect + call tools):
@@ -127,16 +127,19 @@ All tools are admin-only. Successful results return JSON text; failures set
 
 Limits: name ≤ 160 chars, description ≤ 2 000 chars.
 
-### Sprints (6)
+### Sprints (9)
 
 | Tool | Purpose | Key inputs |
 | --- | --- | --- |
 | `list_sprints` | List / filter | optional `project_id`, `status` |
-| `get_sprint` | One sprint + project name | `id` |
+| `get_sprint` | One sprint + project name + release notes | `id` |
 | `create_sprint` | Draft sprint on active project | `project_id`, `sprint_number`, `version` (must start with `v`), `start_date` / `end_date` (`YYYY-MM-DD`), optional `description`, `working_days`, `daily_work_hours` |
 | `update_sprint` | Edit draft/active fields | `id` + any updatable fields — completed/archived are read-only |
 | `set_sprint_status` | Lifecycle transitions | `id`, `status`; see transitions below |
 | `delete_sprint` | Permanent delete | `id`, `confirm: true` |
+| `set_sprint_release_notes` | Update release notes (Tiptap JSON doc) | `id`, `release_notes` |
+| `get_sprint_milestones` | Get delivery milestones in order | `sprint_id` |
+| `set_sprint_milestones` | Replace/clear delivery milestones | `sprint_id`, `milestones` |
 
 Statuses: `draft` → `active` → `completed`; `archived` restores to `draft`.
 
@@ -164,15 +167,38 @@ Guardrails:
 - Suspension bans at Auth and sets `profiles.status` so existing tokens stop
   working through the app proxy.
 
+### Capacity (5)
+
+| Tool | Purpose | Key inputs |
+| --- | --- | --- |
+| `list_activity_types` | All work activity types | — |
+| `create_activity_type` | Create a work activity type | `name` (≤ 80 chars, unique) |
+| `set_activity_type_active` | Activate / deactivate an activity type | `id`, `is_active` |
+| `get_sprint_capacity` | Full sprint capacity plan + computed hours | `sprint_id` |
+| `set_sprint_capacity` | Replace allocations, time-off, and notes | `sprint_id`, `allocations`, `time_off`, `activity_notes` |
+
+`get_sprint_capacity` returns the sprint, project members, allocations, time-off,
+activity notes, and a per-member summary: available days/hours, allocated hours,
+and remaining hours.
+
+`set_sprint_capacity` mirrors the dashboard capacity dialog and replaces the
+whole plan in one transaction via `replace_sprint_member_plan`. Validation:
+
+- Sprint must be `draft` or `active`; completed/archived plans are read-only.
+- Every planned user must be an **active member** of the sprint's project.
+- Every allocation must reference an **active** activity type.
+- Allocation hours: 0.25–100,000, at most two decimal places; one entry per
+  user + activity.
+- Time-off ranges: valid `YYYY-MM-DD`, non-overlapping per user, and inside the
+  sprint date range.
+- Activity notes: activity name ≤ 160 chars, note ≤ 2,000 chars.
+
 ---
 
 ## What MCP does **not** cover
 
 These remain dashboard-only:
 
-- Sprint release notes
-- Sprint member capacity / allocations
-- Sprint milestones
 - Workspace settings
 - Profile self-service / my-sprint-activity
 
@@ -204,7 +230,7 @@ cleans up. It does **not** hit HTTP Bearer auth on `/api/mcp` — use
 
 ## Adding tools (maintainers)
 
-1. Implement in `lib/mcp/tools/{projects,sprints,users}.ts` with zod schemas.
+1. Implement in `lib/mcp/tools/{projects,sprints,users,capacity}.ts` with zod schemas.
 2. Mirror validation/guardrails from the matching `app/dashboard/*/actions.ts`.
 3. Reuse `ok` / `fail` from `lib/mcp/result.ts`.
 4. Cover the tool in `scripts/verify-mcp.ts` and bump the tool-count assertion.

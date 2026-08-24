@@ -38,6 +38,7 @@ let projectId = "";
 let extraProjectId = "";
 const sprintIds: string[] = [];
 let createdUserId = "";
+let activityTypeId = "";
 
 try {
   // Throwaway admin acts as the MCP caller.
@@ -84,8 +85,8 @@ try {
 
   const { tools } = await client.listTools();
   record(
-    "server exposes all 19 admin tools",
-    tools.length === 19,
+    "server exposes all 27 admin tools",
+    tools.length === 27,
     `count=${tools.length}: ${tools.map((tool) => tool.name).join(", ")}`,
   );
 
@@ -416,6 +417,39 @@ try {
     detail(result),
   );
 
+  // Capacity plans cannot be changed on completed sprints.
+  result = await call("set_sprint_capacity", {
+    sprint_id: firstSprintId,
+    allocations: [{ user_id: createdUserId, activity_id: "00000000-0000-0000-0000-000000000000", hours: 8 }],
+    time_off: [],
+    activity_notes: [],
+  });
+  record(
+    "set_sprint_capacity rejects completed sprints",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_sprint_release_notes", {
+    id: firstSprintId,
+    release_notes: { type: "doc", content: [{ type: "paragraph" }] },
+  });
+  record(
+    "set_sprint_release_notes rejects completed sprints",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_sprint_milestones", {
+    sprint_id: firstSprintId,
+    milestones: [{ title: "x", target_date: "2026-08-24", status: "upcoming", icon: "flag" }],
+  });
+  record(
+    "set_sprint_milestones rejects completed sprints",
+    isError(result),
+    detail(result),
+  );
+
   result = await call("update_sprint", {
     id: firstSprintId,
     description: "should not apply",
@@ -494,6 +528,191 @@ try {
   record(
     "re-add project member before plan guards",
     !isError(result),
+    detail(result),
+  );
+
+  // --- Capacity planning ----------------------------------------------------
+  result = await call("create_activity_type", {
+    name: `MCP Verify Activity ${stamp}`,
+  });
+  record("create_activity_type", !isError(result), detail(result));
+  activityTypeId = String(payload(result).id ?? "");
+
+  result = await call("create_activity_type", {
+    name: `MCP Verify Activity ${stamp}`,
+  });
+  record(
+    "create_activity_type rejects duplicate names",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("list_activity_types");
+  record(
+    "list_activity_types includes the new activity",
+    !isError(result) && text(result).includes(activityTypeId),
+  );
+
+  result = await call("set_activity_type_active", {
+    id: activityTypeId,
+    is_active: false,
+  });
+  record("set_activity_type_active deactivates", !isError(result), detail(result));
+
+  result = await call("get_sprint_capacity", { sprint_id: secondSprintId });
+  record(
+    "get_sprint_capacity returns empty plan",
+    !isError(result) && text(result).includes(secondSprintId),
+  );
+
+  // Cannot allocate to an inactive activity.
+  result = await call("set_sprint_capacity", {
+    sprint_id: secondSprintId,
+    allocations: [{ user_id: createdUserId, activity_id: activityTypeId, hours: 8 }],
+    time_off: [],
+    activity_notes: [],
+  });
+  record(
+    "set_sprint_capacity rejects inactive activities",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_activity_type_active", {
+    id: activityTypeId,
+    is_active: true,
+  });
+  record("set_activity_type_active reactivates", !isError(result), detail(result));
+
+  result = await call("set_sprint_capacity", {
+    sprint_id: secondSprintId,
+    allocations: [{ user_id: createdUserId, activity_id: activityTypeId, hours: 8 }],
+    time_off: [{ user_id: createdUserId, start_date: "2026-09-08", end_date: "2026-09-08" }],
+    activity_notes: [
+      { user_id: createdUserId, activity: "verify-mcp", note: "capacity note" },
+    ],
+  });
+  record("set_sprint_capacity", !isError(result), detail(result));
+
+  result = await call("get_sprint_capacity", { sprint_id: secondSprintId });
+  const capacityPayload = payload(result);
+  record(
+    "get_sprint_capacity reflects saved plan",
+    !isError(result) &&
+      Array.isArray(capacityPayload.allocations) &&
+      capacityPayload.allocations.length === 1 &&
+      Array.isArray(capacityPayload.time_off) &&
+      capacityPayload.time_off.length === 1 &&
+      Array.isArray(capacityPayload.activity_notes) &&
+      capacityPayload.activity_notes.length === 1,
+    detail(result),
+  );
+
+  result = await call("set_sprint_capacity", {
+    sprint_id: secondSprintId,
+    allocations: [{ user_id: createdUserId, activity_id: activityTypeId, hours: 0.1 }],
+    time_off: [],
+    activity_notes: [],
+  });
+  record(
+    "set_sprint_capacity rejects invalid allocation hours",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_sprint_capacity", {
+    sprint_id: secondSprintId,
+    allocations: [],
+    time_off: [
+      { user_id: createdUserId, start_date: "2026-09-07", end_date: "2026-09-09" },
+      { user_id: createdUserId, start_date: "2026-09-08", end_date: "2026-09-10" },
+    ],
+    activity_notes: [],
+  });
+  record(
+    "set_sprint_capacity rejects overlapping time-off",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_sprint_capacity", {
+    sprint_id: secondSprintId,
+    allocations: [],
+    time_off: [{ user_id: createdUserId, start_date: "2026-09-01", end_date: "2026-09-30" }],
+    activity_notes: [],
+  });
+  record(
+    "set_sprint_capacity rejects time-off outside sprint range",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_sprint_capacity", {
+    sprint_id: secondSprintId,
+    allocations: [{ user_id: adminId, activity_id: activityTypeId, hours: 8 }],
+    time_off: [],
+    activity_notes: [],
+  });
+  record(
+    "set_sprint_capacity rejects non-project members",
+    isError(result),
+    detail(result),
+  );
+
+  // --- Release notes and milestones -----------------------------------------
+  result = await call("set_sprint_release_notes", {
+    id: secondSprintId,
+    release_notes: {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "verify-mcp" }] }],
+    },
+  });
+  record("set_sprint_release_notes", !isError(result), detail(result));
+
+  result = await call("get_sprint", { id: secondSprintId });
+  record(
+    "get_sprint includes release notes",
+    !isError(result) && text(result).includes("verify-mcp"),
+  );
+
+  result = await call("set_sprint_milestones", {
+    sprint_id: secondSprintId,
+    milestones: [
+      {
+        title: "MCP Verify Milestone",
+        target_date: "2026-09-07",
+        status: "upcoming",
+        icon: "flag",
+      },
+    ],
+  });
+  record("set_sprint_milestones", !isError(result), detail(result));
+
+  result = await call("get_sprint_milestones", { sprint_id: secondSprintId });
+  record(
+    "get_sprint_milestones reflects saved milestones",
+    !isError(result) && text(result).includes("MCP Verify Milestone"),
+  );
+
+  result = await call("set_sprint_milestones", {
+    sprint_id: secondSprintId,
+    milestones: [],
+  });
+  record("set_sprint_milestones clears milestones", !isError(result), detail(result));
+
+  result = await call("get_sprint_milestones", { sprint_id: secondSprintId });
+  record(
+    "get_sprint_milestones returns empty after clear",
+    !isError(result) && text(result) === "[]",
+  );
+
+  result = await call("set_sprint_milestones", {
+    sprint_id: secondSprintId,
+    milestones: [{ title: "", target_date: "2026-09-07", status: "upcoming", icon: "flag" }],
+  });
+  record(
+    "set_sprint_milestones rejects empty titles",
+    isError(result),
     detail(result),
   );
 
@@ -602,6 +821,10 @@ try {
     (leftovers?.length ?? 0) === 0,
     `leftover=${leftovers?.map((row) => row.email).join(",") || "none"}`,
   );
+
+  if (activityTypeId) {
+    await service.from("activity_types").delete().eq("id", activityTypeId);
+  }
 
   console.log("\n" + results.join("\n") + "\n");
   if (results.some((entry) => entry.startsWith("FAIL"))) process.exit(1);

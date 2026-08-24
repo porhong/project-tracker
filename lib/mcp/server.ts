@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolContext } from "./context";
+import { registerCapacityTools } from "./tools/capacity";
 import { registerProjectTools } from "./tools/projects";
 import { registerSprintTools } from "./tools/sprints";
 import { registerUserTools } from "./tools/users";
@@ -16,6 +17,7 @@ export function createMcpServer(ctx: ToolContext) {
     version: "1.0.0",
   });
 
+  registerCapacityTools(server, ctx);
   registerProjectTools(server, ctx);
   registerSprintTools(server, ctx);
   registerUserTools(server, ctx);
