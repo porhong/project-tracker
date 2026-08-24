@@ -41,11 +41,12 @@ const PERMISSIONS: Record<AppRole, { allowed: string[]; denied: string[] }> = {
   },
   user: {
     allowed: [
-      "View the overview",
+      "View your project overview (own activity only)",
       "View your own account details",
       "Manage your own allocation, time off, and activity notes in active sprints",
     ],
     denied: [
+      "View another member’s sprint activity on the overview",
       "Manage another member’s sprint activity",
       "Manage activity in draft or completed sprints",
       "Create, edit, or remove accounts",
@@ -189,8 +190,19 @@ export default async function DashboardPage({
 }: PageProps<"/dashboard">) {
   const user = await requireProfile();
   const params = await searchParams;
-  if (user.role === "viewer") {
-    return <ClientOverview searchParams={Promise.resolve(params)} />;
+  if (user.role === "viewer" || user.role === "user") {
+    const error = typeof params.error === "string" ? params.error : undefined;
+    const notice = error ? NOTICES[error] : undefined;
+    return (
+      <div className="space-y-6">
+        {notice ? (
+          <Alert variant="destructive" role="status">
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        ) : null}
+        <ClientOverview searchParams={Promise.resolve(params)} />
+      </div>
+    );
   }
   const error = typeof params.error === "string" ? params.error : undefined;
   const notice = error ? NOTICES[error] : undefined;
@@ -208,20 +220,14 @@ export default async function DashboardPage({
           <h1 className="text-2xl font-semibold">
             Welcome back, {user.fullName || user.email}
           </h1>
-          <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-            {ROLE_LABELS[user.role]}
-          </Badge>
+          <Badge variant="default">{ROLE_LABELS[user.role]}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          {user.role === "admin"
-            ? "You can manage accounts from the Users page."
-            : user.role === "user"
-              ? "You can manage your own activity in active sprints."
-              : "You have read-only access."}
+          You can manage accounts from the Users page.
         </p>
       </header>
 
-      {user.role === "admin" ? <AdminStats /> : null}
+      <AdminStats />
 
       <section className="grid gap-4 md:grid-cols-2">
         <AccountCard user={user} />

@@ -101,8 +101,21 @@ export async function requireAdmin(): Promise<CurrentUser> {
 }
 
 /**
- * Authorizes the read-only client overview. Viewer accounts are the client
- * audience; other roles retain their existing, role-specific dashboards.
+ * Authorizes the project overview at `/dashboard`. Viewers see the full
+ * assigned-project delivery picture; users see the same layout scoped to their
+ * own sprint activity. Admins keep a separate home.
+ */
+export async function requireOverviewAccess(): Promise<CurrentUser> {
+  const user = await requireProfile();
+  if (user.role !== "viewer" && user.role !== "user") {
+    redirect("/dashboard?error=forbidden");
+  }
+  return user;
+}
+
+/**
+ * Authorizes viewer-only surfaces. Prefer `requireOverviewAccess` when the
+ * page is shared with the `user` role.
  */
 export async function requireViewer(): Promise<CurrentUser> {
   const user = await requireProfile();

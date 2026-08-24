@@ -54,6 +54,7 @@ type SprintTimelineProps = {
   progressRows: ClientSprintProgress[];
   totalPlannedHours: number;
   milestones?: ClientSprintMilestone[];
+  activityScope?: "own" | "team";
 };
 
 const fullDateFormat = new Intl.DateTimeFormat("en", {
@@ -149,7 +150,9 @@ export function SprintTimeline({
   progressRows,
   totalPlannedHours,
   milestones: customMilestones,
+  activityScope = "team",
 }: SprintTimelineProps) {
+  const isOwnScope = activityScope === "own";
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
   // Current date in UTC representation for consistent comparison
@@ -602,7 +605,11 @@ export function SprintTimeline({
               {hours(totalPlannedHours)}h
             </p>
             <p className="text-[11px] text-muted-foreground truncate">
-              {progressRows.length} team member{progressRows.length === 1 ? "" : "s"} assigned
+              {isOwnScope
+                ? progressRows.length > 0
+                  ? "Your planned hours"
+                  : "No planned hours yet"
+                : `${progressRows.length} team member${progressRows.length === 1 ? "" : "s"} assigned`}
             </p>
           </div>
         </CardContent>

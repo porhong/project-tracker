@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { requireViewer } from "@/lib/auth/guards";
+import { requireOverviewAccess } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewHeaderControls } from "./_components/client-overview-header-controls";
 import { MemberActivityExplorer } from "./_components/member-activity-explorer";
@@ -18,7 +18,7 @@ import type {
 } from "./types";
 
 export const metadata: Metadata = {
-  title: "Client overview · Project Tracker",
+  title: "Overview · Project Tracker",
 };
 
 type ClientOverviewPageProps = {
@@ -56,7 +56,14 @@ function hasReleaseNoteContent(value: unknown): boolean {
 export async function ClientOverview({
   searchParams,
 }: ClientOverviewPageProps) {
-  await requireViewer();
+  const user = await requireOverviewAccess();
+  const activityScope = user.role === "user" ? "own" : "team";
+  const overviewTitle =
+    activityScope === "own" ? "My overview" : "Client overview";
+  const overviewFallbackDescription =
+    activityScope === "own"
+      ? "Follow your project releases and your own sprint activity."
+      : "Follow project releases and the team’s sprint activity.";
   const params = await searchParams;
   const requestedProjectId =
     typeof params.project === "string" ? params.project : undefined;
@@ -87,9 +94,9 @@ export async function ClientOverview({
     return (
       <div className="space-y-6">
         <header className="space-y-1">
-          <h1 className="text-2xl font-semibold">Client overview</h1>
+          <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
           <p className="text-sm text-muted-foreground">
-            Follow project releases and the team&apos;s sprint activity.
+            {overviewFallbackDescription}
           </p>
         </header>
         <Alert>
@@ -206,14 +213,13 @@ export async function ClientOverview({
       <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="max-w-2xl space-y-2">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold">Client overview</h1>
+            <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
             <Badge variant={selectedProject.status === "active" ? "default" : "secondary"}>
               {selectedProject.status === "active" ? "Active project" : "Archived project"}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {selectedProject.description ||
-              "Follow project releases and the team’s sprint activity."}
+            {selectedProject.description || overviewFallbackDescription}
           </p>
         </div>
         <ClientOverviewHeaderControls
@@ -224,6 +230,7 @@ export async function ClientOverview({
       </header>
 
       <OverviewTabs
+        activityScope={activityScope}
         sprintTimeline={
           !selectedSprint ? (
             <Alert>
@@ -237,6 +244,7 @@ export async function ClientOverview({
               progressRows={selectedSprintRows}
               totalPlannedHours={plannedHours}
               milestones={selectedSprintMilestones}
+              activityScope={activityScope}
             />
           )
         }
@@ -252,6 +260,7 @@ export async function ClientOverview({
               sprint={selectedSprint}
               progressRows={selectedSprintRows}
               totalPlannedHours={plannedHours}
+              activityScope={activityScope}
             />
           )
         }

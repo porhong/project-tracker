@@ -1,0 +1,95 @@
+- generic [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - banner [ref=f1e3]:
+      - generic [ref=f1e4]:
+        - link "Project Tracker" [ref=f1e5] [cursor=pointer]:
+          - /url: /dashboard
+        - navigation "Dashboard navigation" [ref=f1e6]:
+          - link "Overview" [ref=f1e7] [cursor=pointer]:
+            - /url: /dashboard
+          - link "My sprint activity" [ref=f1e8] [cursor=pointer]:
+            - /url: /dashboard/my-sprint-activity
+        - generic [ref=f1e9]:
+          - link [ref=f1e10] [cursor=pointer]:
+            - /url: /dashboard/profile
+            - generic [ref=f1e11]:
+              - paragraph [ref=f1e12]: Porhong KEAT
+              - paragraph [ref=f1e13]: User
+            - img "Porhong KEAT" [ref=f1e15]
+          - button "Sign out" [ref=f1e17]
+    - main [ref=f1e18]:
+      - generic [ref=f1e235]:
+        - generic [ref=f1e236]:
+          - generic [ref=f1e237]:
+            - generic [ref=f1e238]:
+              - heading "My overview" [level=1] [ref=f1e239]
+              - generic [ref=f1e240]: Active project
+            - paragraph [ref=f1e241]: Follow your project releases and your own sprint activity.
+          - button "ALLWEB-RURAL-LODGE" [ref=f1e244]
+        - generic [ref=f1e251]:
+          - tablist "Project overview sections" [ref=f1e252]:
+            - tab "Sprint Overview" [ref=f1e253]
+            - tab "My work" [ref=f1e254]
+            - tab "Release Notes" [active] [selected] [ref=f1e255]
+          - tabpanel "Release Notes" [ref=f1e293]:
+            - generic [ref=f1e295]:
+              - main [ref=f1e296]:
+                - region "Releases for version v1.8.1" [ref=f1e297]:
+                  - generic [ref=f1e300]:
+                    - generic [ref=f1e301]: Version v1.8.1
+                    - generic [ref=f1e302]: ·
+                    - generic [ref=f1e303]: 1 release
+                  - article [ref=f1e306]:
+                    - generic [ref=f1e307]:
+                      - generic [ref=f1e308]:
+                        - generic [ref=f1e309]:
+                          - 'heading "Sprint #33" [level=3] [ref=f1e310]'
+                          - generic [ref=f1e311]: v1.8.1
+                          - generic [ref=f1e312]: Completed
+                        - generic [ref=f1e313]: Aug 10–Aug 21, 2026
+                      - paragraph [ref=f1e317]: "Sprint 33 (10-21 Aug 2026). 31 items from OpenProject backlog: 14 tasks, 5 user stories, 3 improvements, 1 bug, plus meetings/support/QA. Includes security remediation chores (Ansible Vault, Kong Admin API, Grafana/MinIO) and auth hardening (HttpOnly cookies, cross-owner access guard)."
+                    - textbox [ref=f1e320]:
+                      - heading "Sprint 33 — v1.8.1" [level=2] [ref=f1e321]
+                      - paragraph [ref=f1e322]: Security hardening and release readiness for v1.8.0, alongside the Become-a-Host auth flow and a shadcn/ui frontend migration.
+                      - list [ref=f1e323]:
+                        - listitem [ref=f1e324]:
+                          - paragraph [ref=f1e325]: "Security: Locked down infra exposure across the Kong Admin API, Grafana/MinIO consoles, and Cloudflare Tunnel token rotation"
+                        - listitem [ref=f1e326]:
+                          - paragraph [ref=f1e327]: "Security: Encrypted Ansible Vault secrets across dev, staging, pre-prod, and prod inventories"
+                        - listitem [ref=f1e328]:
+                          - paragraph [ref=f1e329]: "Auth & Access Control: Shipped the Become-a-Host authentication and routing flow - header actions, policy-acceptance dialog, post-login redirect"
+                        - listitem [ref=f1e330]:
+                          - paragraph [ref=f1e331]: "Auth & Access Control: Closed access-control gaps with page-level auth guards and a cross-owner access fix"
+                        - listitem [ref=f1e332]:
+                          - paragraph [ref=f1e333]: "Auth & Access Control: Fixed Apple SSO for local development"
+                        - listitem [ref=f1e334]:
+                          - paragraph [ref=f1e335]: "Frontend: Migrated raw HTML buttons to shadcn/ui and cleaned up unused button styles"
+                        - listitem [ref=f1e336]:
+                          - paragraph [ref=f1e337]: "Frontend: Added the dual booking calendar and reordered the lodge details section with improved booking card logic"
+                        - listitem [ref=f1e338]:
+                          - paragraph [ref=f1e339]: "Frontend: Removed Order Schedule from booking-calendar availability logic; fixed a new SonarQube issue"
+                        - listitem [ref=f1e340]:
+                          - paragraph [ref=f1e341]: "Frontend: Polished the admin/client dashboard UI and made homepage search responsive"
+                        - listitem [ref=f1e342]:
+                          - paragraph [ref=f1e343]: "Other: Reviewed the ABA payment gateway integration"
+                        - listitem [ref=f1e344]:
+                          - paragraph [ref=f1e345]: "Other: Refactored the release-downgrade path"
+                      - paragraph [ref=f1e346]
+                - generic [ref=f1e347]: All 1 release loaded
+              - complementary [ref=f1e353]:
+                - generic [ref=f1e355]:
+                  - generic [ref=f1e356]:
+                    - heading "Release index" [level=3] [ref=f1e362]
+                    - generic [ref=f1e363]: "1"
+                  - navigation "Release notes index" [ref=f1e364]:
+                    - generic [ref=f1e365]:
+                      - generic [ref=f1e366]:
+                        - button "Version v1.8.1" [ref=f1e367]
+                        - generic [ref=f1e368]: 1 sprint
+                      - 'button "Sprint #33 v1.8.1" [ref=f1e370]':
+                        - generic [ref=f1e371]: "Sprint #33"
+                        - generic [ref=f1e372]: v1.8.1
+                  - button "Back to top" [ref=f1e375]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f1e193] [cursor=pointer]
+  - alert [ref=f1e197]: My overview
