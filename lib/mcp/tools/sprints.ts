@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { parseReleaseNotes } from "@/lib/release-notes";
 import { SPRINT_STATUSES } from "@/lib/sprint-config";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
 import type { ToolContext } from "../context";
@@ -41,6 +42,21 @@ const descriptionSchema = z
     MAX_DESCRIPTION_LENGTH,
     `Description must be at most ${MAX_DESCRIPTION_LENGTH.toLocaleString()} characters.`,
   );
+
+// Mirrors the limits in app/dashboard/sprints/actions.ts.
+const ALLOWED_MILESTONE_STATUSES = ["upcoming", "in_progress", "completed", "delayed"] as const;
+const ALLOWED_MILESTONE_ICONS = [
+  "compass",
+  "sparkles",
+  "code",
+  "shield",
+  "rocket",
+  "flag",
+  "check",
+  "users",
+] as const;
+const MAX_MILESTONE_TITLE_LENGTH = 120;
+const MAX_MILESTONE_DESCRIPTION_LENGTH = 1_000;
 
 function databaseError(message: string) {
   if (message.includes("sprints_project_number_key")) {
@@ -336,6 +352,130 @@ export function registerSprintTools(server: McpServer, ctx: ToolContext) {
       const { error } = await client.from("sprints").delete().eq("id", id);
       if (error) return fail(error.message);
       return ok({ deleted: current });
+    },
+  );
+
+  server.registerTool(
+    "set_sprint_release_notes",
+    {
+      title: "Set sprint release notes",
+      description:
+        "Update a sprint's release notes as a Tiptap JSON document. Completed and archived sprints are read-only. Admin only.",
+      inputSchema: {
+        id: z.string().uuid(),
+        release_notes: z
+          .any()
+          .describe("Tiptap JSON document object."),
+      },
+    },
+    async ({ id, release_notes }) => {
+      const { data: current, error: readError } = await client
+        .from("sprints")
+        .select("status")
+        .eq("id", id)
+        .single();
+      if (readError || !current) return fail("Sprint not found.");
+      if (current.status === "completed" || current.status === "archived") {
+        return fail("Completed or archived sprint release notes are read-only.");
+      }
+
+      const parsed = parseReleaseNotes(JSON.stringify(release_notes));
+      if ("error" in parsed) return fail(parsed.error);
+
+      const { data, error } = await client
+        .from("sprints")
+        .update({ release_notes: parsed.data })
+        .eq("id", id)
+        .select("id, release_notes")
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "get_sprint_milestones",
+    {
+      title: "Get sprint milestones",
+      description: "Get a sprint's delivery milestones in order. Admin only.",
+      inputSchema: {
+        sprint_id: z.string().uuid(),
+      },
+    },
+    async ({ sprint_id }) => {
+      const { data, error } = await client
+        .from("sprint_milestones")
+        .select(
+          "id, sprint_id, title, description, target_date, status, icon, order_index, created_at, updated_at",
+        )
+        .eq("sprint_id", sprint_id)
+        .order("order_index");
+      if (error) return fail(error.message);
+      return ok(data ?? []);
+    },
+  );
+
+  server.registerTool(
+    "set_sprint_milestones",
+    {
+      title: "Set sprint milestones",
+      description:
+        "Replace a sprint's delivery milestones. Pass an empty array to clear them. The sprint must be draft or active. Admin only.",
+      inputSchema: {
+        sprint_id: z.string().uuid(),
+        milestones: z.array(
+          z.object({
+            title: z
+              .string()
+              .trim()
+              .min(1)
+              .max(MAX_MILESTONE_TITLE_LENGTH),
+            description: z
+              .string()
+              .trim()
+              .max(MAX_MILESTONE_DESCRIPTION_LENGTH)
+              .optional(),
+            target_date: dateSchema,
+            status: z.enum(ALLOWED_MILESTONE_STATUSES),
+            icon: z.enum(ALLOWED_MILESTONE_ICONS),
+          }),
+        ),
+      },
+    },
+    async ({ sprint_id, milestones }) => {
+      const { data: sprint, error: readError } = await client
+        .from("sprints")
+        .select("status")
+        .eq("id", sprint_id)
+        .single();
+      if (readError || !sprint) return fail("Sprint not found.");
+      if (sprint.status === "completed" || sprint.status === "archived") {
+        return fail("Completed or archived sprint milestones are read-only.");
+      }
+
+      const { error: deleteError } = await client
+        .from("sprint_milestones")
+        .delete()
+        .eq("sprint_id", sprint_id);
+      if (deleteError) return fail(deleteError.message);
+
+      if (milestones.length > 0) {
+        const rows = milestones.map((milestone, index) => ({
+          sprint_id,
+          title: milestone.title,
+          description: milestone.description || null,
+          target_date: milestone.target_date,
+          status: milestone.status,
+          icon: milestone.icon,
+          order_index: index,
+        }));
+        const { error: insertError } = await client
+          .from("sprint_milestones")
+          .insert(rows);
+        if (insertError) return fail(insertError.message);
+      }
+
+      return ok({ sprint_id, milestones: milestones.length });
     },
   );
 }
