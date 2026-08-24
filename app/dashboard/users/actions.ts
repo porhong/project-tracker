@@ -105,10 +105,16 @@ export async function createUser(
 
   // The on_auth_user_created trigger already inserted the profile, but GoTrue
   // applies custom app_metadata *after* the auth.users insert, so the trigger
-  // saw no role and defaulted to 'viewer'. Set the real role explicitly.
+  // saw no role and defaulted to 'viewer'. Set the real role explicitly and
+  // force a password change for non-admin accounts.
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ role, full_name: fullName || null, competency: competency || null })
+    .update({
+      role,
+      full_name: fullName || null,
+      competency: competency || null,
+      force_password_change: role !== "admin",
+    })
     .eq("id", created.user.id);
 
   if (profileError) {
@@ -200,15 +206,30 @@ export async function updateUser(
   );
   if (authError) return fail(authError.message);
 
+  const profileUpdate: {
+    email: string;
+    full_name: string | null;
+    competency: string | null;
+    role: AppRole;
+    avatar_path: string | null;
+    force_password_change?: boolean;
+  } = {
+    email,
+    full_name: fullName || null,
+    competency: competency || null,
+    role: role as AppRole,
+    avatar_path: avatarPath,
+  };
+
+  // Admin-supplied passwords are untrusted; make the user pick their own on
+  // next sign-in. Admins are never forced.
+  if (password && role !== "admin") {
+    profileUpdate.force_password_change = true;
+  }
+
   const { error: profileError } = await admin
     .from("profiles")
-    .update({
-      email,
-      full_name: fullName || null,
-      competency: competency || null,
-      role: role as AppRole,
-      avatar_path: avatarPath,
-    })
+    .update(profileUpdate)
     .eq("id", id);
 
   if (profileError) {

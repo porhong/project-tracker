@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth/guards";
 import { AVATAR_BUCKET, isAvatarPathForUser } from "@/lib/profile/avatar";
@@ -12,6 +13,7 @@ export type ProfileActionResult =
 
 const MAX_FULL_NAME_LENGTH = 120;
 const MAX_COMPETENCY_LENGTH = 120;
+const MIN_PASSWORD_LENGTH = 8;
 
 function fail(error: string): ProfileActionResult {
   return { ok: false, error };
@@ -127,5 +129,78 @@ export async function removeMyAvatar(): Promise<ProfileActionResult> {
       warning: "Your profile was updated, but the old photo could not be deleted.",
     };
   }
+  return { ok: true };
+}
+
+/**
+ * Changes the current user's password after verifying the current one.
+ *
+ * The password is updated through the service role so Supabase does not require
+ * a reauthentication nonce, but only after the current password has been
+ * checked with a fresh, isolated sign-in attempt.
+ */
+export async function changeMyPassword(
+  formData: FormData,
+): Promise<ProfileActionResult> {
+  const user = await requireProfile();
+
+  const currentPassword = String(formData.get("current_password") ?? "");
+  const newPassword = String(formData.get("new_password") ?? "");
+  const confirmPassword = String(formData.get("confirm_new_password") ?? "");
+
+  if (!currentPassword) {
+    return fail("Current password is required.");
+  }
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return fail(
+      `New password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+    );
+  }
+  if (newPassword !== confirmPassword) {
+    return fail("New password and confirmation do not match.");
+  }
+  if (newPassword === currentPassword) {
+    return fail("New password must be different from the current password.");
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !publishableKey) {
+    return fail("Authentication service is not configured.");
+  }
+
+  // Verify the current password without affecting the browser session.
+  const authClient = createSupabaseClient(supabaseUrl, publishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error: verifyError } = await authClient.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  });
+  if (verifyError) {
+    return fail("Current password is incorrect.");
+  }
+
+  // Apply the new password and clear the forced-change flag.
+  const admin = createAdminClient();
+  const { error: passwordError } = await admin.auth.admin.updateUserById(
+    user.id,
+    { password: newPassword },
+  );
+  if (passwordError) {
+    return fail(passwordError.message);
+  }
+
+  const { error: profileError } = await admin
+    .from("profiles")
+    .update({ force_password_change: false })
+    .eq("id", user.id);
+  if (profileError) {
+    return fail(profileError.message);
+  }
+
+  revalidateProfile();
   return { ok: true };
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createAvatarUrl } from "@/lib/profile/avatar-url";
 import { requireProfile } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
+import { PasswordChangeForm } from "./_components/password-change-form";
 import { ProfileEditor } from "./_components/profile-editor";
 
 export const metadata: Metadata = { title: "My profile · Project Tracker" };
@@ -32,6 +33,7 @@ export default async function ProfilePage() {
         }}
         avatarUrl={avatarUrl}
       />
+      <PasswordChangeForm />
     </div>
   );
 }

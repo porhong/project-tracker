@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MarqueeLabel } from "../../_components/marquee-label";
 import type { ClientSprint } from "../types";
 
 type ClientOverviewSelectorProps = {
@@ -27,6 +28,9 @@ export function ClientOverviewSelector({
   const [isPending, startTransition] = useTransition();
 
   const selectedSprint = sprints.find((item) => item.id === selectedSprintId);
+  const selectedLabel = selectedSprint
+    ? `Sprint #${selectedSprint.sprint_number} · ${selectedSprint.version}`
+    : "Select sprint";
 
   const updateSelection = (sprintId?: string | null) => {
     if (!sprintId || sprintId === selectedSprintId) return;
@@ -43,14 +47,12 @@ export function ClientOverviewSelector({
             <Button
               id="client-sprint"
               variant="outline"
-              className="w-full justify-between bg-input/50 hover:bg-input/70"
+              className="w-full min-w-0 justify-between overflow-hidden bg-input/50 hover:bg-input/70"
               disabled={isPending || sprints.length === 0}
             />
           }
         >
-          {selectedSprint
-            ? `Sprint #${selectedSprint.sprint_number} · ${selectedSprint.version}`
-            : "Select sprint"}
+          <MarqueeLabel>{selectedLabel}</MarqueeLabel>
           <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
