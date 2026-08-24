@@ -64,7 +64,7 @@ export function PasswordChangeForm({ forced = false }: Props) {
         <CardTitle>Change password</CardTitle>
         <CardDescription>
           {forced
-            ? "Your account requires a password change before you can continue."
+            ? "Set a new password to continue. Your temporary password is no longer needed."
             : "Update your password by providing your current one."}
         </CardDescription>
       </CardHeader>
@@ -79,16 +79,18 @@ export function PasswordChangeForm({ forced = false }: Props) {
             </Alert>
           ) : null}
 
-          <div className="space-y-2">
-            <Label htmlFor="current_password">Current password</Label>
-            <Input
-              id="current_password"
-              name="current_password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </div>
+          {forced ? null : (
+            <div className="space-y-2">
+              <Label htmlFor="current_password">Current password</Label>
+              <Input
+                id="current_password"
+                name="current_password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="new_password">New password</Label>

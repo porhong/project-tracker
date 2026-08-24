@@ -19,11 +19,6 @@ export function validateAvatarFile(file: File): string | null {
   return null;
 }
 
-export function createAvatarPath(userId: string, file: File) {
-  const extension = AVATAR_FILE_TYPES[file.type as keyof typeof AVATAR_FILE_TYPES];
-  return `${userId}/${crypto.randomUUID()}.${extension}`;
-}
-
 export function isAvatarPathForUser(value: unknown, userId: string): value is string {
   if (typeof value !== "string") return false;
   const escapedUserId = userId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

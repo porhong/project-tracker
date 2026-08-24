@@ -133,24 +133,24 @@ export async function removeMyAvatar(): Promise<ProfileActionResult> {
 }
 
 /**
- * Changes the current user's password after verifying the current one.
+ * Changes the current user's password.
+ *
+ * For voluntary changes the current password is verified first. For forced
+ * changes (first sign-in after admin provisioning) the current password is not
+ * required because the user has just authenticated with it and the profile flag
+ * is the source of truth for skipping the check.
  *
  * The password is updated through the service role so Supabase does not require
- * a reauthentication nonce, but only after the current password has been
- * checked with a fresh, isolated sign-in attempt.
+ * a reauthentication nonce.
  */
 export async function changeMyPassword(
   formData: FormData,
 ): Promise<ProfileActionResult> {
   const user = await requireProfile();
 
-  const currentPassword = String(formData.get("current_password") ?? "");
   const newPassword = String(formData.get("new_password") ?? "");
   const confirmPassword = String(formData.get("confirm_new_password") ?? "");
 
-  if (!currentPassword) {
-    return fail("Current password is required.");
-  }
   if (newPassword.length < MIN_PASSWORD_LENGTH) {
     return fail(
       `New password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
@@ -159,32 +159,52 @@ export async function changeMyPassword(
   if (newPassword !== confirmPassword) {
     return fail("New password and confirmation do not match.");
   }
-  if (newPassword === currentPassword) {
-    return fail("New password must be different from the current password.");
+
+  // Use the service role to read the forced-change flag; this prevents the
+  // browser from claiming a forced change when one is not actually pending.
+  const admin = createAdminClient();
+  const { data: profile, error: profileReadError } = await admin
+    .from("profiles")
+    .select("force_password_change")
+    .eq("id", user.id)
+    .single();
+  if (profileReadError || !profile) {
+    return fail("Could not load your account status.");
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !publishableKey) {
-    return fail("Authentication service is not configured.");
-  }
+  const forcedChange = profile.force_password_change;
 
-  // Verify the current password without affecting the browser session.
-  const authClient = createSupabaseClient(supabaseUrl, publishableKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { error: verifyError } = await authClient.auth.signInWithPassword({
-    email: user.email,
-    password: currentPassword,
-  });
-  if (verifyError) {
-    return fail("Current password is incorrect.");
+  if (!forcedChange) {
+    const currentPassword = String(formData.get("current_password") ?? "");
+    if (!currentPassword) {
+      return fail("Current password is required.");
+    }
+    if (newPassword === currentPassword) {
+      return fail("New password must be different from the current password.");
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const publishableKey =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !publishableKey) {
+      return fail("Authentication service is not configured.");
+    }
+
+    // Verify the current password without affecting the browser session.
+    const authClient = createSupabaseClient(supabaseUrl, publishableKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error: verifyError } = await authClient.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (verifyError) {
+      return fail("Current password is incorrect.");
+    }
   }
 
   // Apply the new password and clear the forced-change flag.
-  const admin = createAdminClient();
   const { error: passwordError } = await admin.auth.admin.updateUserById(
     user.id,
     { password: newPassword },

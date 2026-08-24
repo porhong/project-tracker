@@ -152,7 +152,7 @@ try {
   });
 
   // 5. A User can replace their own plan for an active sprint, but cannot
-  // touch another user’s rows or a draft sprint.
+  // touch another user’s rows or a draft/completed sprint.
   const { data: userSession, error: userSignInError } =
     await anonClient().auth.signInWithPassword({ email: userEmail, password });
   if (userSignInError || !userSession.session) throw userSignInError;
@@ -267,6 +267,25 @@ try {
     "user cannot save an allocation with invalid activity",
     Boolean(invalidActivityPlanError),
     invalidActivityPlanError?.message ?? "write SUCCEEDED",
+  );
+  const { error: completeSprintError } = await admin
+    .from("sprints")
+    .update({ status: "completed" })
+    .eq("id", activeSprint.id);
+  if (completeSprintError) throw completeSprintError;
+  const { error: completedPlanError } = await userScoped.rpc(
+    "replace_my_active_sprint_plan",
+    {
+      p_sprint_id: activeSprint.id,
+      p_allocations: [],
+      p_time_off: [],
+      p_activity_notes: [],
+    },
+  );
+  record(
+    "user cannot manage a completed sprint",
+    Boolean(completedPlanError),
+    completedPlanError?.message ?? "write SUCCEEDED",
   );
 
   // 6. RLS through PostgREST: viewer sees only themselves.

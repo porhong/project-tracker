@@ -56,7 +56,11 @@ export function MarqueeLabel({ children }: { children: string }) {
   }, [overflow, children]);
 
   return (
-    <span ref={containerRef} className="min-w-0 flex-1 overflow-hidden text-left" title={children}>
+    <span
+      ref={containerRef}
+      className="flex min-w-0 flex-1 items-center self-stretch overflow-hidden text-left"
+      title={children}
+    >
       <span
         ref={textRef}
         className={cn("inline-block max-w-none", overflow <= 0 && "truncate")}

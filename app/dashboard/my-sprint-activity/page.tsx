@@ -36,7 +36,10 @@ export default async function MySprintActivityPage({
   const requestedProjectId =
     typeof params.project === "string" ? params.project : undefined;
   const supabase = await createClient();
-  const sprintStatuses = user.role === "user" ? ["active"] : ["draft", "active"];
+  const sprintStatuses =
+    user.role === "user"
+      ? ["active", "completed"]
+      : ["draft", "active", "completed"];
   const { data: projects, error: projectsError } = await supabase
     .from("projects")
     .select("id, name")
@@ -118,6 +121,144 @@ export default async function MySprintActivityPage({
       note,
     ]),
   );
+  const allSprints = sprints ?? [];
+  const currentSprints = allSprints.filter(
+    (sprint) => sprint.status !== "completed",
+  );
+  const completedSprints = allSprints.filter(
+    (sprint) => sprint.status === "completed",
+  );
+
+  const renderSprintCard = (sprint: (typeof allSprints)[number]) => {
+    const sprintAllocations = allocationsBySprint.get(sprint.id) ?? [];
+    const sprintTimeOff = timeOffBySprint.get(sprint.id) ?? [];
+    const sprintNotes = notesBySprint.get(sprint.id) ?? [];
+    const days = countAvailableSprintDays(sprint, sprintTimeOff);
+    const available = memberAvailableHours(sprint, sprintTimeOff);
+    const allocated = sprintAllocations.reduce(
+      (total, allocation) => total + Number(allocation.hours),
+      0,
+    );
+    const editable = user.role === "user" && sprint.status === "active";
+
+    return (
+      <Card key={sprint.id}>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Sprint #{sprint.sprint_number}</CardTitle>
+              <CardDescription>
+                {projectsById.get(sprint.project_id) ?? "Project"} ·{" "}
+                {sprint.start_date} — {sprint.end_date}
+              </CardDescription>
+            </div>
+            <Badge
+              variant={
+                sprint.status === "active"
+                  ? "default"
+                  : sprint.status === "completed"
+                    ? "secondary"
+                    : "outline"
+              }
+            >
+              {SPRINT_STATUS_LABELS[
+                sprint.status as keyof typeof SPRINT_STATUS_LABELS
+              ] ?? sprint.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Available</p>
+              <p className="font-semibold tabular-nums">{hours(available)}h</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Allocated</p>
+              <p className="font-semibold tabular-nums">{hours(allocated)}h</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Days</p>
+              <p className="font-semibold tabular-nums">{days}</p>
+            </div>
+          </div>
+          <Separator />
+
+          {editable ? (
+            <MySprintActivityEditor
+              sprintId={sprint.id}
+              startDate={sprint.start_date}
+              endDate={sprint.end_date}
+              workingDays={sprint.working_days}
+              dailyWorkHours={Number(sprint.daily_work_hours)}
+              activities={activeActivities}
+              allocations={sprintAllocations}
+              timeOff={sprintTimeOff}
+              notes={sprintNotes}
+            />
+          ) : (
+            <>
+              {sprintAllocations.length ? (
+                <ul className="grid gap-2">
+                  {sprintAllocations.map((allocation) => (
+                    <li
+                      className="flex items-center justify-between gap-4 text-sm"
+                      key={allocation.activity_id}
+                    >
+                      <span>
+                        {activitiesById.get(allocation.activity_id) ??
+                          "Inactive activity"}
+                      </span>
+                      <span className="font-medium tabular-nums">
+                        {hours(Number(allocation.hours))}h
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No activity allocation has been planned yet.
+                </p>
+              )}
+              {sprintNotes.length ? (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Activity notes</p>
+                    <ul className="grid gap-2">
+                      {sprintNotes.map((activityNote, index) => (
+                        <li
+                          className="text-sm"
+                          key={`${activityNote.activity}-${index}`}
+                        >
+                          <p className="font-medium">{activityNote.activity}</p>
+                          {activityNote.note ? (
+                            <p className="text-muted-foreground">
+                              {activityNote.note}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              ) : null}
+              {sprintTimeOff.length ? (
+                <p className="text-xs text-muted-foreground">
+                  Time off:{" "}
+                  {sprintTimeOff
+                    .map(
+                      (record) => `${record.start_date} — ${record.end_date}`,
+                    )
+                    .join(", ")}
+                </p>
+              ) : null}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -125,144 +266,60 @@ export default async function MySprintActivityPage({
         <h1 className="text-2xl font-semibold">My sprint activity</h1>
         <p className="text-sm text-muted-foreground">
           {user.role === "user"
-            ? "Manage your own activity, availability, and allocation for active sprints."
+            ? "Manage your activity, availability, and allocation for active sprints, then review completed sprint history."
             : "Your planned availability and activity allocation for projects you currently belong to."}
         </p>
       </header>
 
-      {(sprints ?? []).length === 0 ? (
+      {allSprints.length === 0 ? (
         <Alert>
           <AlertDescription>
             {user.role === "user"
-              ? "You are not currently assigned to a project with an active sprint."
-              : "You are not currently assigned to a project with a draft or active sprint."}
+              ? "You are not currently assigned to a project with an active or completed sprint."
+              : "You are not currently assigned to a project with a draft, active, or completed sprint."}
           </AlertDescription>
         </Alert>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {(sprints ?? []).map((sprint) => {
-            const sprintAllocations = allocationsBySprint.get(sprint.id) ?? [];
-            const sprintTimeOff = timeOffBySprint.get(sprint.id) ?? [];
-            const sprintNotes = notesBySprint.get(sprint.id) ?? [];
-            const days = countAvailableSprintDays(sprint, sprintTimeOff);
-            const available = memberAvailableHours(sprint, sprintTimeOff);
-            const allocated = sprintAllocations.reduce(
-              (total, allocation) =>
-                total + Number(allocation.hours),
-              0,
-            );
-            const editable = user.role === "user" && sprint.status === "active";
+        <div className="space-y-8">
+          {currentSprints.length ? (
+            <section aria-labelledby="current-sprints-heading" className="space-y-4">
+              <div className="space-y-1">
+                <h2 id="current-sprints-heading" className="text-lg font-semibold">
+                  {user.role === "user" ? "Current sprint" : "Open sprints"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {user.role === "user"
+                    ? "Update your plan for the active sprint."
+                    : "Review your activity for draft and active sprints."}
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {currentSprints.map(renderSprintCard)}
+              </div>
+            </section>
+          ) : user.role === "user" ? (
+            <Alert>
+              <AlertDescription>
+                You do not have an active sprint. Your completed sprint activity is available below.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-            return (
-              <Card key={sprint.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle>
-                        Sprint #{sprint.sprint_number}
-                      </CardTitle>
-                      <CardDescription>
-                        {projectsById.get(sprint.project_id) ?? "Project"} ·{" "}
-                        {sprint.start_date} — {sprint.end_date}
-                      </CardDescription>
-                    </div>
-                    <Badge variant={sprint.status === "active" ? "default" : sprint.status === "completed" ? "secondary" : "outline"}>
-                      {SPRINT_STATUS_LABELS[sprint.status as keyof typeof SPRINT_STATUS_LABELS] ?? sprint.status}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Available</p>
-                      <p className="font-semibold tabular-nums">{hours(available)}h</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Allocated</p>
-                      <p className="font-semibold tabular-nums">{hours(allocated)}h</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Days</p>
-                      <p className="font-semibold tabular-nums">{days}</p>
-                    </div>
-                  </div>
-                  <Separator />
-
-                  {editable ? (
-                    <MySprintActivityEditor
-                      sprintId={sprint.id}
-                      startDate={sprint.start_date}
-                      endDate={sprint.end_date}
-                      workingDays={sprint.working_days}
-                      dailyWorkHours={Number(sprint.daily_work_hours)}
-                      activities={activeActivities}
-                      allocations={sprintAllocations}
-                      timeOff={sprintTimeOff}
-                      notes={sprintNotes}
-                    />
-                  ) : (
-                    <>
-                      {sprintAllocations.length ? (
-                        <ul className="grid gap-2">
-                          {sprintAllocations.map((allocation) => (
-                            <li
-                              className="flex items-center justify-between gap-4 text-sm"
-                              key={allocation.activity_id}
-                            >
-                              <span>
-                                {activitiesById.get(allocation.activity_id) ??
-                                  "Inactive activity"}
-                              </span>
-                              <span className="font-medium tabular-nums">
-                                {hours(Number(allocation.hours))}h
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          No activity allocation has been planned yet.
-                        </p>
-                      )}
-                      {sprintNotes.length ? (
-                        <>
-                          <Separator />
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium">Activity notes</p>
-                            <ul className="grid gap-2">
-                              {sprintNotes.map((activityNote, index) => (
-                                <li
-                                  className="text-sm"
-                                  key={`${activityNote.activity}-${index}`}
-                                >
-                                  <p className="font-medium">{activityNote.activity}</p>
-                                  {activityNote.note ? (
-                                    <p className="text-muted-foreground">
-                                      {activityNote.note}
-                                    </p>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </>
-                      ) : null}
-                      {sprintTimeOff.length ? (
-                        <p className="text-xs text-muted-foreground">
-                          Time off:{" "}
-                          {sprintTimeOff
-                            .map(
-                              (record) => `${record.start_date} — ${record.end_date}`,
-                            )
-                            .join(", ")}
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          {completedSprints.length ? (
+            <section aria-labelledby="completed-sprints-heading" className="space-y-4">
+              <div className="space-y-1">
+                <h2 id="completed-sprints-heading" className="text-lg font-semibold">
+                  Completed sprints
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Historical activity is read-only after a sprint is completed.
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {completedSprints.map(renderSprintCard)}
+              </div>
+            </section>
+          ) : null}
         </div>
       )}
     </div>

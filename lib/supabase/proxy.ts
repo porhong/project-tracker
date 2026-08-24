@@ -136,11 +136,13 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Non-admin users with a pending password change must complete it before
-  // using the dashboard. The change-password page itself must stay reachable.
+  // using the dashboard. The change-password page itself must stay reachable,
+  // and sign-out must always work so the user is not trapped.
   if (
     forcePasswordChange &&
     (effectiveRole === "viewer" || effectiveRole === "user") &&
-    pathname !== "/dashboard/change-password"
+    pathname !== "/dashboard/change-password" &&
+    pathname !== "/auth/sign-out"
   ) {
     return redirectTo("/dashboard/change-password", { forced: "1" });
   }
