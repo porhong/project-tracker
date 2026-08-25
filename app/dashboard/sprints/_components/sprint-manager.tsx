@@ -2,14 +2,36 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { format, isValid, parseISO } from "date-fns";
-import { CalendarIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  CalendarIcon,
+  CheckCircle2Icon,
+  FileTextIcon,
+  FlagIcon,
+  GaugeIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  PlayIcon,
+  PlusIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
@@ -195,61 +217,109 @@ export function SprintManager({
                         <MoreHorizontalIcon />
                         <span className="sr-only">Actions for sprint #{sprint.sprint_number}</span>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => setManagingMilestones(sprint)}>
-                          {sprint.status === "completed" || sprint.status === "archived" ? "View milestones" : "Manage milestones"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setEditingReleaseNotes(sprint)}>
-                          {sprint.status === "completed" || sprint.status === "archived" ? "View release notes" : "Edit release notes"}
-                        </DropdownMenuItem>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuGroup>
+                          <DropdownMenuLabel>Content</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => setManagingMilestones(sprint)}>
+                            <FlagIcon />
+                            {sprint.status === "completed" || sprint.status === "archived" ? "View milestones" : "Manage milestones"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setEditingReleaseNotes(sprint)}>
+                            <FileTextIcon />
+                            {sprint.status === "completed" || sprint.status === "archived" ? "View release notes" : "Edit release notes"}
+                          </DropdownMenuItem>
+                          {sprint.status !== "completed" && sprint.status !== "archived" ? (
+                            <DropdownMenuItem onClick={() => setManagingCapacity(sprint)}>
+                              <GaugeIcon />
+                              Manage capacity
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuGroup>
                         {sprint.status !== "completed" && sprint.status !== "archived" ? (
                           <>
-                            <DropdownMenuItem onClick={() => setManagingCapacity(sprint)}>Manage member capacity</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setEditing(sprint)}>Edit</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                              <DropdownMenuLabel>Sprint</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => setEditing(sprint)}>
+                                <PencilIcon />
+                                Edit details
+                              </DropdownMenuItem>
+                              {sprint.status === "draft" ? (
+                                <DropdownMenuItem onClick={() => setStarting(sprint)}>
+                                  <PlayIcon />
+                                  Start sprint
+                                </DropdownMenuItem>
+                              ) : null}
+                              {sprint.status === "active" ? (
+                                <DropdownMenuItem onClick={() => setCompleting(sprint)}>
+                                  <CheckCircle2Icon />
+                                  Complete sprint
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuGroup>
                           </>
                         ) : null}
-                        {sprint.status === "draft" ? (
-                          <DropdownMenuItem onClick={() => setStarting(sprint)}>Start sprint</DropdownMenuItem>
-                        ) : null}
-                        {sprint.status === "active" ? (
-                          <DropdownMenuItem onClick={() => setCompleting(sprint)}>Complete sprint</DropdownMenuItem>
-                        ) : null}
-                        {sprint.status === "completed" ? (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setReenabling(sprint);
-                              setReenablePassword("");
-                              setReenableError(null);
-                            }}
-                          >
-                            Re-enable sprint
-                          </DropdownMenuItem>
-                        ) : null}
-                        {sprint.status === "archived" ? (
-                          <DropdownMenuItem onClick={() => run(() => unarchiveSprint(sprint.id), undefined, undefined, "Sprint restored to draft.")}>Restore to draft</DropdownMenuItem>
+                        {sprint.status === "completed" || sprint.status === "archived" ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                              <DropdownMenuLabel>Status</DropdownMenuLabel>
+                              {sprint.status === "completed" ? (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setReenabling(sprint);
+                                    setReenablePassword("");
+                                    setReenableError(null);
+                                  }}
+                                >
+                                  <RotateCcwIcon />
+                                  Re-enable sprint
+                                </DropdownMenuItem>
+                              ) : null}
+                              {sprint.status === "archived" ? (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    run(
+                                      () => unarchiveSprint(sprint.id),
+                                      undefined,
+                                      undefined,
+                                      "Sprint restored to draft.",
+                                    )
+                                  }
+                                >
+                                  <ArchiveRestoreIcon />
+                                  Restore to draft
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuGroup>
+                          </>
                         ) : null}
                         <DropdownMenuSeparator />
-                        {sprint.status !== "archived" ? (
+                        <DropdownMenuGroup>
+                          {sprint.status !== "archived" ? (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setArchiving(sprint);
+                                setArchivePassword("");
+                                setArchiveError(null);
+                              }}
+                            >
+                              <ArchiveIcon />
+                              Archive sprint
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem
+                            variant="destructive"
                             onClick={() => {
-                              setArchiving(sprint);
-                              setArchivePassword("");
-                              setArchiveError(null);
+                              setDeleting(sprint);
+                              setDeletePassword("");
+                              setDeleteError(null);
                             }}
                           >
-                            Archive sprint
+                            <Trash2Icon />
+                            Delete sprint
                           </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => {
-                            setDeleting(sprint);
-                            setDeletePassword("");
-                            setDeleteError(null);
-                          }}
-                        >
-                          Delete sprint
-                        </DropdownMenuItem>
+                        </DropdownMenuGroup>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

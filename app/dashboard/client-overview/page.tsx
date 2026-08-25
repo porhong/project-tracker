@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { requireOverviewAccess } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewHeaderControls } from "./_components/client-overview-header-controls";
@@ -60,7 +59,7 @@ export async function ClientOverview({
   const activityScope =
     user.role === "user" ? ("own" as const) : ("team" as const);
   const overviewTitle =
-    activityScope === "own" ? "My overview" : "Client overview";
+    activityScope === "own" ? "My overview" : "Overview";
   const overviewFallbackDescription =
     activityScope === "own"
       ? "Follow your project releases and your own sprint activity."
@@ -213,12 +212,7 @@ export async function ClientOverview({
     <div className="space-y-8">
       <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="max-w-2xl space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
-            <Badge variant={selectedProject.status === "active" ? "default" : "secondary"}>
-              {selectedProject.status === "active" ? "Active project" : "Archived project"}
-            </Badge>
-          </div>
+          <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
           <p className="text-sm text-muted-foreground">
             {selectedProject.description || overviewFallbackDescription}
           </p>
@@ -227,6 +221,13 @@ export async function ClientOverview({
           projects={projects ?? []}
           visibleSprints={visibleSprints}
           selectedSprintId={selectedSprint?.id ?? null}
+          selectedProject={selectedProject}
+          selectedSprint={selectedSprint ?? null}
+          selectedSprintRows={selectedSprintRows}
+          selectedSprintMilestones={selectedSprintMilestones}
+          totalPlannedHours={plannedHours}
+          activityScope={activityScope}
+          userRole={user.role}
         />
       </header>
 
