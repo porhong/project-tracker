@@ -101,13 +101,13 @@ export async function requireAdmin(): Promise<CurrentUser> {
 }
 
 /**
- * Authorizes the project overview at `/dashboard`. Viewers see the full
- * assigned-project delivery picture; users see the same layout scoped to their
- * own sprint activity. Admins keep a separate home.
+ * Authorizes the project overview at `/dashboard`. Viewers and admins see the
+ * full delivery picture for a project; users see the same layout scoped to
+ * their own sprint activity.
  */
 export async function requireOverviewAccess(): Promise<CurrentUser> {
   const user = await requireProfile();
-  if (user.role !== "viewer" && user.role !== "user") {
+  if (user.role !== "viewer" && user.role !== "user" && user.role !== "admin") {
     redirect("/dashboard?error=forbidden");
   }
   return user;

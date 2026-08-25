@@ -57,7 +57,8 @@ export async function ClientOverview({
   searchParams,
 }: ClientOverviewPageProps) {
   const user = await requireOverviewAccess();
-  const activityScope = user.role === "user" ? "own" : "team";
+  const activityScope =
+    user.role === "user" ? ("own" as const) : ("team" as const);
   const overviewTitle =
     activityScope === "own" ? "My overview" : "Client overview";
   const overviewFallbackDescription =

@@ -387,6 +387,29 @@ try {
     `rows=${viewerRows?.length}`,
   );
 
+  const { data: adminOverview, error: adminOverviewError } = await adminScoped.rpc(
+    "get_client_project_sprint_progress",
+    { p_project_id: projectId },
+  );
+  const adminOverviewRows = (adminOverview ?? []) as Array<Record<string, unknown>>;
+  record(
+    "admin reads the full client sprint overview",
+    !adminOverviewError &&
+      adminOverviewRows.some((row) => row.sprint_id === activeSprint.id) &&
+      adminOverviewRows.length >= 2,
+    adminOverviewError?.message ?? `rows=${adminOverviewRows.length}`,
+  );
+  const { data: adminUnassignedOverview, error: adminUnassignedOverviewError } =
+    await adminScoped.rpc("get_client_project_sprint_progress", {
+      p_project_id: unassignedProjectId,
+    });
+  record(
+    "admin reads an unassigned client project overview",
+    !adminUnassignedOverviewError,
+    adminUnassignedOverviewError?.message ??
+      `rows=${(adminUnassignedOverview ?? []).length}`,
+  );
+
   // 7. Self-service profile fields and private avatar storage stay scoped to
   // the signed-in user. Use real authenticated requests, not the secret key.
   const ownAvatarPath = `${userId}/11111111-1111-4111-8111-111111111111.png`;
