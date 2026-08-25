@@ -1,0 +1,66 @@
+- generic [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - banner [ref=f1e3]:
+      - generic [ref=f1e4]:
+        - link "Project Tracker" [ref=f1e5] [cursor=pointer]:
+          - /url: /dashboard
+        - navigation "Dashboard navigation" [ref=f1e6]:
+          - link "Overview" [ref=f1e7] [cursor=pointer]:
+            - /url: /dashboard
+          - link "My sprint activity" [ref=f1e8] [cursor=pointer]:
+            - /url: /dashboard/my-sprint-activity
+        - generic [ref=f1e9]:
+          - link [ref=f1e10] [cursor=pointer]:
+            - /url: /dashboard/profile
+            - generic [ref=f1e11]:
+              - paragraph [ref=f1e12]: Porhong KEAT
+              - paragraph [ref=f1e13]: User
+            - img "Porhong KEAT" [ref=f1e15]
+          - button "Sign out" [ref=f1e17]
+    - main [ref=f1e18]:
+      - generic [ref=f1e19]:
+        - generic [ref=f1e20]:
+          - generic [ref=f1e21]:
+            - generic [ref=f1e22]:
+              - heading "My overview" [level=1] [ref=f1e23]
+              - generic [ref=f1e24]: Active project
+            - paragraph [ref=f1e25]: Follow your project releases and your own sprint activity.
+          - generic [ref=f1e26]:
+            - button "ALLWEB-RURAL-LODGE" [ref=f1e28]
+            - 'button "Sprint #34 · v1.8.2" [ref=f1e32]'
+        - generic [ref=f1e35]:
+          - tablist "Project overview sections" [ref=f1e36]:
+            - tab "Sprint Overview" [ref=f1e37]
+            - tab "My work" [active] [selected] [ref=f1e38]
+            - tab "Release Notes" [ref=f1e39]
+          - tabpanel "My work" [ref=f1e198]:
+            - generic [ref=f1e199]:
+              - generic [ref=f1e200]:
+                - textbox "Search your focus areas or notes..." [ref=f1e202]
+                - generic [ref=f1e203]:
+                  - generic [ref=f1e204]:
+                    - button "Your activity (1)" [ref=f1e205]
+                    - button "With updates (0)" [ref=f1e206]
+                    - button "Awaiting (1)" [ref=f1e207]
+                  - separator [ref=f1e208]
+                  - generic [ref=f1e209]:
+                    - button "Cards view" [ref=f1e210]: Cards
+                    - button "Table view" [ref=f1e211]: Table
+              - generic [ref=f1e213]:
+                - generic [ref=f1e215]:
+                  - generic [ref=f1e216]:
+                    - generic [ref=f1e217]: PK
+                    - generic [ref=f1e219]:
+                      - generic [ref=f1e220]: Porhong KEAT
+                      - generic [ref=f1e221]: Team Lead
+                  - generic [ref=f1e223]:
+                    - generic [ref=f1e224]: 0h planned
+                    - paragraph [ref=f1e225]: 0 focus areas
+                - generic [ref=f1e227]:
+                  - generic [ref=f1e228]:
+                    - generic [ref=f1e229]: Status Update
+                    - generic [ref=f1e233]: Awaiting Update
+                  - paragraph [ref=f1e234]: No progress updates logged for this sprint yet.
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f1e193] [cursor=pointer]
+  - alert [ref=f1e197]: My overview

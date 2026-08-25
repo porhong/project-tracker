@@ -46,6 +46,7 @@ type MemberActivityExplorerProps = {
   sprint: ClientSprint;
   progressRows: ClientSprintProgress[];
   totalPlannedHours: number;
+  activityScope?: "own" | "team";
 };
 
 const hours = (value: number) =>
@@ -102,7 +103,9 @@ export function MemberActivityExplorer({
   sprint,
   progressRows,
   totalPlannedHours,
+  activityScope = "team",
 }: MemberActivityExplorerProps) {
+  const isOwnScope = activityScope === "own";
   const searchParams = useSearchParams();
   const urlSearchParam = searchParams.get("search") || "";
   const [userQuery, setUserQuery] = useState<string | null>(null);
@@ -222,7 +225,9 @@ export function MemberActivityExplorer({
     return (
       <Alert>
         <AlertDescription>
-          No team members are assigned to Sprint #{sprint.sprint_number}.
+          {isOwnScope
+            ? `You do not have planned activity on Sprint #${sprint.sprint_number} yet.`
+            : `No team members are assigned to Sprint #${sprint.sprint_number}.`}
         </AlertDescription>
       </Alert>
     );
@@ -238,7 +243,11 @@ export function MemberActivityExplorer({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search member, role, or focus area..."
+            placeholder={
+              isOwnScope
+                ? "Search your focus areas or notes..."
+                : "Search member, role, or focus area..."
+            }
             className="pl-9 pr-8"
           />
           {searchQuery ? (
@@ -262,7 +271,7 @@ export function MemberActivityExplorer({
               size="xs"
               onClick={() => setStatusFilter("all")}
             >
-              All members ({members.length})
+              {isOwnScope ? "Your activity" : "All members"} ({members.length})
             </Button>
             <Button
               type="button"
@@ -362,7 +371,8 @@ export function MemberActivityExplorer({
             <FilterIcon className="size-3.5" />
             <span>
               Showing <strong>{filteredMembers.length}</strong> of{" "}
-              <strong>{members.length}</strong> team members
+              <strong>{members.length}</strong>{" "}
+              {isOwnScope ? "activity rows" : "team members"}
               {selectedActivity ? (
                 <span>
                   {" "}
@@ -391,7 +401,11 @@ export function MemberActivityExplorer({
               <UsersIcon className="size-5 text-muted-foreground" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold">No team members match your filter</h3>
+              <h3 className="text-sm font-semibold">
+                {isOwnScope
+                  ? "Nothing matches your filter"
+                  : "No team members match your filter"}
+              </h3>
               <p className="text-xs text-muted-foreground">
                 Try searching for a different keyword or clearing your active filters.
               </p>

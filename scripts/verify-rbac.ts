@@ -152,7 +152,7 @@ try {
   });
 
   // 5. A User can replace their own plan for an active sprint, but cannot
-  // touch another user’s rows or a draft sprint.
+  // touch another user’s rows or a draft/completed sprint.
   const { data: userSession, error: userSignInError } =
     await anonClient().auth.signInWithPassword({ email: userEmail, password });
   if (userSignInError || !userSession.session) throw userSignInError;
@@ -212,6 +212,39 @@ try {
     ownPlan?.length === 1 && ownPlan[0].user_id === userId,
     `rows=${ownPlan?.length}`,
   );
+
+  // Assigned users share the client overview layout, but the RPC returns only
+  // their own progress — never another member's rows.
+  const { error: peerMemberError } = await admin
+    .from("project_members")
+    .insert({ project_id: projectId, user_id: adminId });
+  if (peerMemberError) throw peerMemberError;
+  const { error: peerAllocationError } = await admin
+    .from("sprint_member_allocations")
+    .insert({
+      sprint_id: activeSprint.id,
+      user_id: adminId,
+      activity_id: activity.id,
+      hours: 40,
+    });
+  if (peerAllocationError) throw peerAllocationError;
+  const { data: userOverview, error: userOverviewError } = await userScoped.rpc(
+    "get_client_project_sprint_progress",
+    { p_project_id: projectId },
+  );
+  const userOverviewRows = (userOverview ?? []) as Array<Record<string, unknown>>;
+  record(
+    "assigned user reads their own overview rows only",
+    !userOverviewError &&
+      userOverviewRows.length === 1 &&
+      userOverviewRows[0].sprint_id === activeSprint.id &&
+      userOverviewRows[0].member_name === "Verify User",
+    userOverviewError?.message ??
+      `rows=${userOverviewRows.length} names=${userOverviewRows
+        .map((row) => row.member_name)
+        .join(",")}`,
+  );
+
   const { error: crossUserWriteError } = await userScoped
     .from("sprint_member_allocations")
     .insert({
@@ -268,6 +301,25 @@ try {
     Boolean(invalidActivityPlanError),
     invalidActivityPlanError?.message ?? "write SUCCEEDED",
   );
+  const { error: completeSprintError } = await admin
+    .from("sprints")
+    .update({ status: "completed" })
+    .eq("id", activeSprint.id);
+  if (completeSprintError) throw completeSprintError;
+  const { error: completedPlanError } = await userScoped.rpc(
+    "replace_my_active_sprint_plan",
+    {
+      p_sprint_id: activeSprint.id,
+      p_allocations: [],
+      p_time_off: [],
+      p_activity_notes: [],
+    },
+  );
+  record(
+    "user cannot manage a completed sprint",
+    Boolean(completedPlanError),
+    completedPlanError?.message ?? "write SUCCEEDED",
+  );
 
   // 6. RLS through PostgREST: viewer sees only themselves.
   const { data: viewerSession } = await anonClient().auth.signInWithPassword({
@@ -298,6 +350,7 @@ try {
     "assigned viewer reads the client sprint overview",
     !viewerProgressError &&
       clientProgressRows.some((row) => row.sprint_id === activeSprint.id) &&
+      clientProgressRows.length >= 2 &&
       clientProgress !== undefined,
     viewerProgressError?.message ?? `rows=${clientProgressRows.length}`,
   );
@@ -332,6 +385,29 @@ try {
     "viewer reads only their own profile via RLS",
     viewerRows?.length === 1 && viewerRows[0].id === viewerId,
     `rows=${viewerRows?.length}`,
+  );
+
+  const { data: adminOverview, error: adminOverviewError } = await adminScoped.rpc(
+    "get_client_project_sprint_progress",
+    { p_project_id: projectId },
+  );
+  const adminOverviewRows = (adminOverview ?? []) as Array<Record<string, unknown>>;
+  record(
+    "admin reads the full client sprint overview",
+    !adminOverviewError &&
+      adminOverviewRows.some((row) => row.sprint_id === activeSprint.id) &&
+      adminOverviewRows.length >= 2,
+    adminOverviewError?.message ?? `rows=${adminOverviewRows.length}`,
+  );
+  const { data: adminUnassignedOverview, error: adminUnassignedOverviewError } =
+    await adminScoped.rpc("get_client_project_sprint_progress", {
+      p_project_id: unassignedProjectId,
+    });
+  record(
+    "admin reads an unassigned client project overview",
+    !adminUnassignedOverviewError,
+    adminUnassignedOverviewError?.message ??
+      `rows=${(adminUnassignedOverview ?? []).length}`,
   );
 
   // 7. Self-service profile fields and private avatar storage stay scoped to

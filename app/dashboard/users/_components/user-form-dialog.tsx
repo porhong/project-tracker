@@ -26,8 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { APP_ROLES, ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
-import { AVATAR_ACCEPT, AVATAR_BUCKET, createAvatarPath, validateAvatarFile } from "@/lib/profile/avatar";
-import { createClient } from "@/lib/supabase/client";
+import { AVATAR_ACCEPT, validateAvatarFile } from "@/lib/profile/avatar";
+import { uploadAvatar } from "@/lib/profile/upload-avatar";
 import { createUser, updateUser, type ActionResult } from "../actions";
 import type { UserWithAvatar } from "../types";
 
@@ -74,17 +74,14 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
           setState({ ok: false, error: validationError });
           return;
         }
-        const avatarPath = createAvatarPath(user.id, avatarFile);
-        const { error: uploadError } = await createClient().storage
-          .from(AVATAR_BUCKET)
-          .upload(avatarPath, avatarFile, { contentType: avatarFile.type, upsert: false });
-        if (uploadError) {
-          const msg = `Could not upload profile photo: ${uploadError.message}`;
+        const result = await uploadAvatar(avatarFile, user.id);
+        if ("error" in result) {
+          const msg = `Could not upload profile photo: ${result.error}`;
           toast.error(msg);
           setState({ ok: false, error: msg });
           return;
         }
-        formData.set("avatar_path", avatarPath);
+        formData.set("avatar_path", result.path);
       }
 
       const result = await action(null, formData);
@@ -135,7 +132,9 @@ export function UserFormDialog({ mode, user, open, onOpenChange }: Props) {
                     disabled={pending}
                     onChange={(event) => chooseAvatar(event.target.files?.[0] ?? null)}
                   />
-                  <p className="text-xs text-muted-foreground">JPEG, PNG, or WebP; 5 MB maximum.</p>
+                  <p className="text-xs text-muted-foreground">
+                    JPEG, PNG, or WebP; 5 MB maximum. Automatically compressed to WebP for fast loading.
+                  </p>
                 </div>
               </div>
               {user.avatar_path ? (

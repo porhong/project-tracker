@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AVATAR_ACCEPT, AVATAR_BUCKET, createAvatarPath, validateAvatarFile } from "@/lib/profile/avatar";
-import { createClient } from "@/lib/supabase/client";
+import { AVATAR_ACCEPT, validateAvatarFile } from "@/lib/profile/avatar";
+import { uploadAvatar } from "@/lib/profile/upload-avatar";
 import { removeMyAvatar, updateMyProfile } from "../actions";
 
 type Props = {
@@ -66,20 +66,14 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
           setMessage({ error: validationError });
           return;
         }
-        const avatarPath = createAvatarPath(user.id, selectedFile);
-        const { error: uploadError } = await createClient().storage
-          .from(AVATAR_BUCKET)
-          .upload(avatarPath, selectedFile, {
-            contentType: selectedFile.type,
-            upsert: false,
-          });
-        if (uploadError) {
-          const msg = `Could not upload profile photo: ${uploadError.message}`;
+        const result = await uploadAvatar(selectedFile);
+        if ("error" in result) {
+          const msg = `Could not upload profile photo: ${result.error}`;
           toast.error(msg);
           setMessage({ error: msg });
           return;
         }
-        formData.set("avatar_path", avatarPath);
+        formData.set("avatar_path", result.path);
       }
 
       const result = await updateMyProfile(formData);
@@ -133,7 +127,7 @@ export function ProfileEditor({ user, avatarUrl }: Props) {
               disabled={pending}
             />
             <p className="text-xs text-muted-foreground">
-              JPEG, PNG, or WebP; 5 MB maximum.
+              JPEG, PNG, or WebP; 5 MB maximum. Automatically compressed to WebP for fast loading.
             </p>
           </div>
         </div>

@@ -8,13 +8,9 @@ import {
   CheckCircle2Icon,
   CheckIcon,
   Clock4Icon,
-  Code2Icon,
-  CompassIcon,
   FlagIcon,
   HourglassIcon,
   MilestoneIcon,
-  RocketIcon,
-  ShieldCheckIcon,
   SparklesIcon,
   UsersIcon,
 } from "lucide-react";
@@ -41,12 +37,19 @@ import {
   MemberProfilePopover,
   type MemberProfileData,
 } from "./member-profile-popover";
+import {
+  computeEffortBreakdown,
+  computeMilestoneMetrics,
+  computeMilestones,
+  computeTimelineData,
+  formatDateFull,
+  monthDayFormat,
+  parseUtcDate,
+} from "../_lib/summary-data";
 import type {
-  ActivityNote,
   ClientSprint,
   ClientSprintMilestone,
   ClientSprintProgress,
-  PlannedAllocation,
 } from "../types";
 
 type SprintTimelineProps = {
@@ -54,338 +57,59 @@ type SprintTimelineProps = {
   progressRows: ClientSprintProgress[];
   totalPlannedHours: number;
   milestones?: ClientSprintMilestone[];
+  activityScope?: "own" | "team";
 };
-
-const fullDateFormat = new Intl.DateTimeFormat("en", {
-  weekday: "short",
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-});
-
-const monthDayFormat = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-});
-
-function parseUtcDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function formatIsoDate(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatDateFull(dateStr: string) {
-  try {
-    return fullDateFormat.format(parseUtcDate(dateStr));
-  } catch {
-    return dateStr;
-  }
-}
 
 const hours = (value: number) =>
   value.toLocaleString("en", { maximumFractionDigits: 1 });
-
-const ICON_MAP = {
-  compass: CompassIcon,
-  sparkles: SparklesIcon,
-  code: Code2Icon,
-  shield: ShieldCheckIcon,
-  rocket: RocketIcon,
-  flag: FlagIcon,
-  check: CheckIcon,
-  users: UsersIcon,
-} as const;
-
-function isPlannedAllocation(value: unknown): value is PlannedAllocation {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "activity" in value &&
-    "hours" in value &&
-    typeof value.activity === "string" &&
-    typeof value.hours === "number"
-  );
-}
-
-function isActivityNote(value: unknown): value is ActivityNote {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "activity" in value &&
-    "note" in value &&
-    "updated_at" in value &&
-    typeof value.activity === "string" &&
-    (typeof value.note === "string" || value.note === null) &&
-    typeof value.updated_at === "string"
-  );
-}
-
-const SEGMENT_BG_COLORS = [
-  "bg-primary",
-  "bg-chart-2",
-  "bg-chart-3",
-  "bg-chart-4",
-  "bg-chart-5",
-  "bg-accent-foreground/70",
-];
-
-const SEGMENT_TEXT_COLORS = [
-  "text-primary",
-  "text-chart-2",
-  "text-chart-3",
-  "text-chart-4",
-  "text-chart-5",
-  "text-foreground",
-];
 
 export function SprintTimeline({
   sprint,
   progressRows,
   totalPlannedHours,
   milestones: customMilestones,
+  activityScope = "team",
 }: SprintTimelineProps) {
+  const isOwnScope = activityScope === "own";
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
-  // Current date in UTC representation for consistent comparison
-  const now = new Date();
-  const todayIso = formatIsoDate(now);
+  const timelineData = useMemo(() => computeTimelineData(sprint), [sprint]);
 
-  // Calculate high-level calendar schedule and progress
-  const timelineData = useMemo(() => {
-    const start = parseUtcDate(sprint.start_date);
-    const end = parseUtcDate(sprint.end_date);
-    const workingDaysSet = new Set(sprint.working_days);
+  const milestones = useMemo(
+    () => computeMilestones(sprint, timelineData, customMilestones),
+    [sprint, timelineData, customMilestones],
+  );
 
-    let totalCalendarDays = 0;
-    let totalWorkingDays = 0;
-    let elapsedWorkingDays = 0;
-    const cursor = new Date(start);
+  const milestoneMetrics = useMemo(
+    () => computeMilestoneMetrics(milestones),
+    [milestones],
+  );
 
-    while (cursor <= end) {
-      totalCalendarDays += 1;
-      const iso = formatIsoDate(cursor);
-      const isoDayOfWeek = ((cursor.getUTCDay() + 6) % 7) + 1; // 1 (Mon) to 7 (Sun)
-      const isWorkingDay = workingDaysSet.has(isoDayOfWeek);
-      const isPast = iso < todayIso;
-      const isToday = iso === todayIso;
-
-      if (isWorkingDay) {
-        totalWorkingDays += 1;
-        if (sprint.status === "completed" || isPast || isToday) {
-          elapsedWorkingDays += 1;
-        }
-      }
-
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-
-    if (sprint.status === "completed") {
-      elapsedWorkingDays = totalWorkingDays;
-    } else if (todayIso < sprint.start_date) {
-      elapsedWorkingDays = 0;
-    }
-
-    const remainingWorkingDays = Math.max(0, totalWorkingDays - elapsedWorkingDays);
-    const progressPercent =
-      totalWorkingDays > 0
-        ? Math.min(100, Math.max(0, Math.round((elapsedWorkingDays / totalWorkingDays) * 100)))
-        : 0;
-
-    const isUpcoming = todayIso < sprint.start_date;
-    const isEnded = todayIso > sprint.end_date || sprint.status === "completed";
-
-    return {
-      totalCalendarDays,
-      totalWorkingDays,
-      elapsedWorkingDays,
-      remainingWorkingDays,
-      progressPercent,
-      isUpcoming,
-      isEnded,
-    };
-  }, [sprint, todayIso]);
-
-  // Delivery milestones: uses live custom milestones if configured, or falls back to standard lifecycle phases
-  const milestones = useMemo(() => {
-    if (customMilestones && customMilestones.length > 0) {
-      return customMilestones
-        .slice()
-        .sort((a, b) => a.order_index - b.order_index)
-        .map((m, idx) => {
-          const Icon = ICON_MAP[m.icon as keyof typeof ICON_MAP] ?? FlagIcon;
-          const timeframe = monthDayFormat.format(parseUtcDate(m.target_date));
-          const targetIso = m.target_date;
-
-          let relativeLabel = "Upcoming";
-          let isDueToday = false;
-          let isOverdue = false;
-
-          if (m.status === "completed") {
-            relativeLabel = "Delivered";
-          } else if (targetIso === todayIso) {
-            relativeLabel = "Due today";
-            isDueToday = true;
-          } else if (targetIso < todayIso) {
-            relativeLabel = "Past target";
-            isOverdue = true;
-          } else {
-            const target = parseUtcDate(targetIso);
-            const today = parseUtcDate(todayIso);
-            const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-            relativeLabel = `In ${diffDays} day${diffDays === 1 ? "" : "s"}`;
-          }
-
-          return {
-            id: m.id,
-            phaseNumber: `Phase 0${idx + 1}`,
-            title: m.title,
-            targetDate: m.target_date,
-            timeframe,
-            relativeLabel,
-            isDueToday,
-            isOverdue,
-            description: m.description || "Sprint delivery milestone deliverable.",
-            icon: Icon,
-            status: m.status,
-          };
-        });
-    }
-
-    const { totalWorkingDays, elapsedWorkingDays, isEnded, isUpcoming } = timelineData;
-    const startStr = monthDayFormat.format(parseUtcDate(sprint.start_date));
-    const endStr = monthDayFormat.format(parseUtcDate(sprint.end_date));
-    const percent = totalWorkingDays > 0 ? (elapsedWorkingDays / totalWorkingDays) * 100 : 0;
-
-    return [
-      {
-        id: "phase-1",
-        phaseNumber: "Phase 01",
-        title: "Kickoff & Scope",
-        targetDate: sprint.start_date,
-        timeframe: startStr,
-        relativeLabel: isEnded || percent >= 20 ? "Completed" : isUpcoming ? "Upcoming" : "In Progress",
-        isDueToday: false,
-        isOverdue: false,
-        description: "Align sprint objectives, review technical requirements, and assign team priorities.",
-        icon: CompassIcon,
-        status: isEnded || percent >= 20 ? ("completed" as const) : isUpcoming ? ("upcoming" as const) : ("in_progress" as const),
-      },
-      {
-        id: "phase-2",
-        phaseNumber: "Phase 02",
-        title: "Core Development",
-        targetDate: sprint.start_date,
-        timeframe: `${startStr} – Mid Sprint`,
-        relativeLabel: isEnded || percent >= 70 ? "Completed" : percent >= 20 ? "In Progress" : "Upcoming",
-        isDueToday: false,
-        isOverdue: false,
-        description: "Develop core feature capabilities, user interface enhancements, and service integrations.",
-        icon: SparklesIcon,
-        status: isEnded || percent >= 70 ? ("completed" as const) : percent >= 20 ? ("in_progress" as const) : ("upcoming" as const),
-      },
-      {
-        id: "phase-3",
-        phaseNumber: "Phase 03",
-        title: "QA & Verification",
-        targetDate: sprint.end_date,
-        timeframe: `Late Sprint – ${endStr}`,
-        relativeLabel: isEnded || percent >= 95 ? "Completed" : percent >= 70 ? "In Verification" : "Upcoming",
-        isDueToday: false,
-        isOverdue: false,
-        description: "End-to-end quality assurance, issue resolution, staging tests, and sign-off.",
-        icon: ShieldCheckIcon,
-        status: isEnded || percent >= 95 ? ("completed" as const) : percent >= 70 ? ("in_progress" as const) : ("upcoming" as const),
-      },
-      {
-        id: "phase-4",
-        phaseNumber: "Phase 04",
-        title: "Release & Handover",
-        targetDate: sprint.end_date,
-        timeframe: endStr,
-        relativeLabel: isEnded ? "Delivered" : percent >= 95 ? "Release Ready" : "Target Release",
-        isDueToday: false,
-        isOverdue: false,
-        description: "Production deployment, release documentation publication, and sprint delivery review.",
-        icon: RocketIcon,
-        status: isEnded ? ("completed" as const) : percent >= 95 ? ("in_progress" as const) : ("upcoming" as const),
-      },
-    ];
-  }, [customMilestones, sprint, timelineData, todayIso]);
-
-  // Milestone Completion Metrics
-  const milestoneMetrics = useMemo(() => {
-    const total = milestones.length;
-    const completed = milestones.filter((m) => m.status === "completed").length;
-    const delayed = milestones.filter((m) => m.status === "delayed" || m.isOverdue).length;
-    const inProgress = milestones.filter((m) => m.status === "in_progress").length;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    return { total, completed, delayed, inProgress, percent };
-  }, [milestones]);
-
-  // Aggregated Sprint Effort Distribution by Activity
-  const effortBreakdown = useMemo(() => {
-    const activityMap = new Map<
-      string,
-      {
-        activity: string;
-        hours: number;
-        contributors: Set<string>;
-      }
-    >();
-
-    progressRows.forEach((row) => {
-      const rowAllocations = Array.isArray(row.planned_allocations)
-        ? row.planned_allocations.filter(isPlannedAllocation)
-        : [];
-
-      rowAllocations.forEach((alloc) => {
-        const existing = activityMap.get(alloc.activity) ?? {
-          activity: alloc.activity,
-          hours: 0,
-          contributors: new Set<string>(),
-        };
-        existing.hours += alloc.hours;
-        if (row.member_name) {
-          existing.contributors.add(row.member_name);
-        }
-        activityMap.set(alloc.activity, existing);
-      });
-    });
-
-    return Array.from(activityMap.values())
-      .sort((a, b) => b.hours - a.hours)
-      .map((item, index) => {
-        const percentage =
-          totalPlannedHours > 0
-            ? Math.round((item.hours / totalPlannedHours) * 100)
-            : 0;
-        return {
-          ...item,
-          percentage,
-          contributors: Array.from(item.contributors),
-          bgColor: SEGMENT_BG_COLORS[index % SEGMENT_BG_COLORS.length] ?? "bg-primary",
-          textColor: SEGMENT_TEXT_COLORS[index % SEGMENT_TEXT_COLORS.length] ?? "text-primary",
-        };
-      });
-  }, [progressRows, totalPlannedHours]);
+  const effortBreakdown = useMemo(
+    () => computeEffortBreakdown(progressRows, totalPlannedHours),
+    [progressRows, totalPlannedHours],
+  );
 
   // Map of member name to full profile details for rich popovers
   const memberProfilesMap = useMemo(() => {
     const map = new Map<string, MemberProfileData>();
-    progressRows.forEach((row) => {
+    for (const row of progressRows) {
       const name = row.member_name || "Project member";
       const rowAllocations = Array.isArray(row.planned_allocations)
-        ? row.planned_allocations.filter(isPlannedAllocation)
+        ? row.planned_allocations.filter(
+            (a): a is { activity: string; hours: number } =>
+              typeof a === "object" && a !== null && "activity" in a && "hours" in a,
+          )
         : [];
       const notes = Array.isArray(row.activity_notes)
-        ? row.activity_notes.filter(isActivityNote)
+        ? row.activity_notes.filter(
+            (n): n is { activity: string; note: string | null; updated_at: string } =>
+              typeof n === "object" &&
+              n !== null &&
+              "activity" in n &&
+              "note" in n &&
+              "updated_at" in n,
+          )
         : [];
       const totalSprintHours = rowAllocations.reduce((sum, a) => sum + a.hours, 0);
       const latestNote = notes.length > 0 ? notes[0] : null;
@@ -398,7 +122,7 @@ export function SprintTimeline({
         notes,
         latestNote,
       });
-    });
+    }
     return map;
   }, [progressRows]);
 
@@ -602,7 +326,11 @@ export function SprintTimeline({
               {hours(totalPlannedHours)}h
             </p>
             <p className="text-[11px] text-muted-foreground truncate">
-              {progressRows.length} team member{progressRows.length === 1 ? "" : "s"} assigned
+              {isOwnScope
+                ? progressRows.length > 0
+                  ? "Your planned hours"
+                  : "No planned hours yet"
+                : `${progressRows.length} team member${progressRows.length === 1 ? "" : "s"} assigned`}
             </p>
           </div>
         </CardContent>

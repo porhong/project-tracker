@@ -13,12 +13,14 @@ type OverviewTabsProps = {
   sprintTimeline: ReactNode;
   activity: ReactNode;
   releaseNotes: ReactNode;
+  activityScope?: "own" | "team";
 };
 
 export function OverviewTabs({
   sprintTimeline,
   activity,
   releaseNotes,
+  activityScope = "team",
 }: OverviewTabsProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -42,7 +44,9 @@ export function OverviewTabs({
     <Tabs value={activeTab} onValueChange={handleTabChange}>
       <TabsList aria-label="Project overview sections" variant="line">
         <TabsTrigger value="timeline">Sprint Overview</TabsTrigger>
-        <TabsTrigger value="activity">Team & Work</TabsTrigger>
+        <TabsTrigger value="activity">
+          {activityScope === "own" ? "My work" : "Team & Work"}
+        </TabsTrigger>
         <TabsTrigger value="release-notes">Release Notes</TabsTrigger>
       </TabsList>
       <TabsContent value="timeline" className="pt-4">

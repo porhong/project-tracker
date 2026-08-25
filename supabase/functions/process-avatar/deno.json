@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "@supabase/functions-js": "jsr:@supabase/functions-js@^2",
+    "@supabase/server": "npm:@supabase/server@^1",
+    "@jsquash/jpeg": "npm:@jsquash/jpeg@^1",
+    "@jsquash/png": "npm:@jsquash/png@^3",
+    "@jsquash/webp": "npm:@jsquash/webp@^1",
+    "@jsquash/resize": "npm:@jsquash/resize@^2"
+  }
+}
