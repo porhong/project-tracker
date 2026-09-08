@@ -1,13 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { useOverviewTab } from "./overview-tab-context";
 
 type OverviewTabsProps = {
   sprintTimeline: ReactNode;
@@ -22,22 +22,12 @@ export function OverviewTabs({
   releaseNotes,
   activityScope = "team",
 }: OverviewTabsProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const activeTab = searchParams.get("tab") || "timeline";
+  const { activeTab, setActiveTab } = useOverviewTab();
 
   const handleTabChange = (value: string | number | null) => {
-    if (!value || typeof value !== "string") return;
-    const params = new URLSearchParams(searchParams.toString());
-    if (value === "timeline") {
-      params.delete("tab");
-    } else {
-      params.set("tab", value);
+    if (typeof value === "string") {
+      setActiveTab(value);
     }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   return (
@@ -49,13 +39,13 @@ export function OverviewTabs({
         </TabsTrigger>
         <TabsTrigger value="release-notes">Release Notes</TabsTrigger>
       </TabsList>
-      <TabsContent value="timeline" className="pt-4">
+      <TabsContent value="timeline" keepMounted className="pt-4">
         {sprintTimeline}
       </TabsContent>
-      <TabsContent value="activity" className="pt-4">
+      <TabsContent value="activity" keepMounted className="pt-4">
         {activity}
       </TabsContent>
-      <TabsContent value="release-notes" className="pt-4">
+      <TabsContent value="release-notes" keepMounted className="pt-4">
         {releaseNotes}
       </TabsContent>
     </Tabs>

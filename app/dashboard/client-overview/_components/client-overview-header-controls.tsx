@@ -1,10 +1,10 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import type { AppRole } from "@/lib/auth/roles";
 import { ProjectSwitcher } from "../../_components/project-switcher";
 import { ClientOverviewSelector } from "./client-overview-selector";
 import { ExportSummaryDialog } from "./export-summary-dialog";
+import { useOverviewTab } from "./overview-tab-context";
 import type {
   ClientProject,
   ClientSprint,
@@ -37,8 +37,7 @@ export function ClientOverviewHeaderControls({
   activityScope = "team",
   userRole,
 }: ClientOverviewHeaderControlsProps) {
-  const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") || "timeline";
+  const { activeTab } = useOverviewTab();
   const showSprintSelector =
     activeTab !== "release-notes" && visibleSprints.length > 0;
   const showExportButton =

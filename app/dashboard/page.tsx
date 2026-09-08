@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ClientOverviewSkeleton } from "./client-overview/_components/overview-skeleton";
 import { ClientOverview } from "./client-overview/page";
 
 export const metadata: Metadata = {
@@ -24,7 +26,9 @@ export default async function DashboardPage({
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
-      <ClientOverview searchParams={Promise.resolve(params)} />
+      <Suspense fallback={<ClientOverviewSkeleton />}>
+        <ClientOverview searchParams={Promise.resolve(params)} />
+      </Suspense>
     </div>
   );
 }

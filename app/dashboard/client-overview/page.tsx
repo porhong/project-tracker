@@ -6,6 +6,7 @@ import { getProjectMemberAvatarMap } from "@/lib/profile/avatar-url";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewHeaderControls } from "./_components/client-overview-header-controls";
 import { MemberActivityExplorer } from "./_components/member-activity-explorer";
+import { OverviewTabProvider } from "./_components/overview-tab-context";
 import { OverviewTabs } from "./_components/overview-tabs";
 import { ReleaseNotesFeed } from "./_components/release-notes-feed";
 import { SprintTimeline } from "./_components/sprint-timeline";
@@ -25,6 +26,7 @@ type ClientOverviewPageProps = {
   searchParams: Promise<{
     project?: string | string[];
     sprint?: string | string[];
+    tab?: string | string[];
   }>;
 };
 
@@ -70,6 +72,8 @@ export async function ClientOverview({
     typeof params.project === "string" ? params.project : undefined;
   const requestedSprintId =
     typeof params.sprint === "string" ? params.sprint : undefined;
+  const requestedTab =
+    typeof params.tab === "string" ? params.tab : "timeline";
   const supabase = await createClient();
 
   const { data: projects, error: projectsError } = await supabase
@@ -215,66 +219,68 @@ export async function ClientOverview({
   );
 
   return (
-    <div className="space-y-8">
-      <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div className="max-w-2xl space-y-2">
-          <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
-          <p className="text-sm text-muted-foreground">
-            {selectedProject.description || overviewFallbackDescription}
-          </p>
-        </div>
-        <ClientOverviewHeaderControls
-          projects={projects ?? []}
-          visibleSprints={visibleSprints}
-          selectedSprintId={selectedSprint?.id ?? null}
-          selectedProject={selectedProject}
-          selectedSprint={selectedSprint ?? null}
-          selectedSprintRows={selectedSprintRows}
-          selectedSprintMilestones={selectedSprintMilestones}
-          totalPlannedHours={plannedHours}
-          activityScope={activityScope}
-          userRole={user.role}
-        />
-      </header>
+    <OverviewTabProvider initialTab={requestedTab}>
+      <div className="space-y-8">
+        <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="max-w-2xl space-y-2">
+            <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
+            <p className="text-sm text-muted-foreground">
+              {selectedProject.description || overviewFallbackDescription}
+            </p>
+          </div>
+          <ClientOverviewHeaderControls
+            projects={projects ?? []}
+            visibleSprints={visibleSprints}
+            selectedSprintId={selectedSprint?.id ?? null}
+            selectedProject={selectedProject}
+            selectedSprint={selectedSprint ?? null}
+            selectedSprintRows={selectedSprintRows}
+            selectedSprintMilestones={selectedSprintMilestones}
+            totalPlannedHours={plannedHours}
+            activityScope={activityScope}
+            userRole={user.role}
+          />
+        </header>
 
-      <OverviewTabs
-        activityScope={activityScope}
-        sprintTimeline={
-          !selectedSprint ? (
-            <Alert>
-              <AlertDescription>
-                No active or completed sprint is available for this project yet.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <SprintTimeline
-              sprint={selectedSprint}
-              progressRows={selectedSprintRows}
-              totalPlannedHours={plannedHours}
-              milestones={selectedSprintMilestones}
-              activityScope={activityScope}
-            />
-          )
-        }
-        activity={
-          !selectedSprint ? (
-            <Alert>
-              <AlertDescription>
-                No active or completed sprint is available for this project yet.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <MemberActivityExplorer
-              sprint={selectedSprint}
-              progressRows={selectedSprintRows}
-              totalPlannedHours={plannedHours}
-              activityScope={activityScope}
-            />
-          )
-        }
-        releaseNotes={<ReleaseNotesFeed releases={releaseSprints} />}
-      />
-    </div>
+        <OverviewTabs
+          activityScope={activityScope}
+          sprintTimeline={
+            !selectedSprint ? (
+              <Alert>
+                <AlertDescription>
+                  No active or completed sprint is available for this project yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <SprintTimeline
+                sprint={selectedSprint}
+                progressRows={selectedSprintRows}
+                totalPlannedHours={plannedHours}
+                milestones={selectedSprintMilestones}
+                activityScope={activityScope}
+              />
+            )
+          }
+          activity={
+            !selectedSprint ? (
+              <Alert>
+                <AlertDescription>
+                  No active or completed sprint is available for this project yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <MemberActivityExplorer
+                sprint={selectedSprint}
+                progressRows={selectedSprintRows}
+                totalPlannedHours={plannedHours}
+                activityScope={activityScope}
+              />
+            )
+          }
+          releaseNotes={<ReleaseNotesFeed releases={releaseSprints} />}
+        />
+      </div>
+    </OverviewTabProvider>
   );
 }
 
