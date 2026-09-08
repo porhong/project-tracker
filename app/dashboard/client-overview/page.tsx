@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requireOverviewAccess } from "@/lib/auth/guards";
+import { getProjectMemberAvatarMap } from "@/lib/profile/avatar-url";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewHeaderControls } from "./_components/client-overview-header-controls";
 import { MemberActivityExplorer } from "./_components/member-activity-explorer";
@@ -109,7 +110,7 @@ export async function ClientOverview({
     );
   }
 
-  const [releaseResult, progressResult] = await Promise.all([
+  const [releaseResult, progressResult, memberAvatarMap] = await Promise.all([
     supabase
       .from("sprints")
       .select(
@@ -121,6 +122,7 @@ export async function ClientOverview({
     supabase.rpc("get_client_project_sprint_progress", {
       p_project_id: selectedProject.id,
     }),
+    getProjectMemberAvatarMap(selectedProject.id),
   ]);
 
   const sprintIds = (releaseResult.data ?? []).map((sprint) => sprint.id);
@@ -144,7 +146,11 @@ export async function ClientOverview({
   }
 
   const allMilestones = (milestonesResult ?? []) as ClientSprintMilestone[];
-  const progressRows = (progressResult.data ?? []) as ClientSprintProgress[];
+  const rawProgressRows = (progressResult.data ?? []) as ClientSprintProgress[];
+  const progressRows: ClientSprintProgress[] = rawProgressRows.map((row) => ({
+    ...row,
+    avatar_url: row.member_name ? (memberAvatarMap.get(row.member_name) ?? null) : null,
+  }));
   const releaseSprints: ClientReleaseSprint[] = (releaseResult.data ?? [])
     .filter((sprint) => hasReleaseNoteContent(sprint.release_notes))
     .map((sprint) => ({

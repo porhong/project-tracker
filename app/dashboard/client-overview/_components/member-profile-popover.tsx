@@ -11,7 +11,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,7 @@ export type MemberProfileData = {
   name: string;
   competency: string;
   totalSprintHours: number;
+  avatarUrl?: string | null;
   allocations?: PlannedAllocation[];
   notes?: ActivityNote[];
   latestNote?: ActivityNote | null;
@@ -139,6 +140,9 @@ export function MemberProfilePopover({
             {/* Member Identity Header */}
             <div className="flex items-center gap-3 min-w-0">
               <Avatar size="lg" className={cn("bg-background ring-2", colorVariant.ringColor)}>
+                {member.avatarUrl ? (
+                  <AvatarImage src={member.avatarUrl} alt={member.name} />
+                ) : null}
                 <AvatarFallback
                   className={cn(
                     "font-semibold text-xs tracking-normal select-none",

@@ -49,6 +49,7 @@ export type ClientSprintProgress = {
   sprint_status: string;
   member_name: string;
   competency: string;
+  avatar_url?: string | null;
   planned_allocations: Json;
   activity_notes: Json;
 };

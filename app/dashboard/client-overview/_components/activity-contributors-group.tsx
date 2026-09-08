@@ -8,6 +8,7 @@ import {
   AvatarFallback,
   AvatarGroup,
   AvatarGroupCount,
+  AvatarImage,
 } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,9 @@ export function ActivityContributorsGroup({
               tooltipText={`${name} (${profile.competency}) · ${hours(memberHours)}h`}
             >
               <Avatar size="sm" className="border-2 border-background bg-background ring-1 ring-border/50">
+                {profile.avatarUrl ? (
+                  <AvatarImage src={profile.avatarUrl} alt={name} />
+                ) : null}
                 <AvatarFallback
                   className={cn(
                     "text-[9px] font-semibold select-none",
@@ -171,6 +175,9 @@ export function ActivityContributorsGroup({
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar size="sm" className="bg-background">
+                          {profile.avatarUrl ? (
+                            <AvatarImage src={profile.avatarUrl} alt={name} />
+                          ) : null}
                           <AvatarFallback
                             className={cn(
                               "text-[10px] font-semibold select-none",
