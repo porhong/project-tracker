@@ -85,10 +85,11 @@ try {
 
   const { tools } = await client.listTools();
   record(
-    "server exposes all 27 admin tools",
-    tools.length === 27,
+    "server exposes all 29 admin tools",
+    tools.length === 29,
     `count=${tools.length}: ${tools.map((tool) => tool.name).join(", ")}`,
   );
+
 
   // --- Projects -----------------------------------------------------------
   let result = await call("create_project", {
@@ -449,6 +450,39 @@ try {
     isError(result),
     detail(result),
   );
+
+  result = await call("set_sprint_retrospective_questions", {
+    sprint_id: firstSprintId,
+    questions: [{ question: "What went well?" }],
+  });
+  record(
+    "set_sprint_retrospective_questions rejects completed sprints",
+    isError(result),
+    detail(result),
+  );
+
+  result = await call("set_sprint_retrospective_questions", {
+    sprint_id: secondSprintId,
+    questions: [
+      { question: "What went well?", description: "Wins" },
+      { question: "What could improve?" },
+    ],
+  });
+  record(
+    "set_sprint_retrospective_questions sets questions on open sprint",
+    !isError(result),
+    detail(result),
+  );
+
+  result = await call("get_sprint_retrospective_questions", {
+    sprint_id: secondSprintId,
+  });
+  record(
+    "get_sprint_retrospective_questions returns questions",
+    !isError(result) && text(result).includes("What went well?"),
+    detail(result),
+  );
+
 
   result = await call("update_sprint", {
     id: firstSprintId,

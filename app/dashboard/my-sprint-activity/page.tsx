@@ -14,7 +14,9 @@ import { requireProfile } from "@/lib/auth/guards";
 import { countAvailableSprintDays, memberAvailableHours } from "@/lib/sprint-capacity";
 import { SPRINT_STATUS_LABELS } from "@/lib/sprint-config";
 import { createClient } from "@/lib/supabase/server";
+import { ProjectSwitcher } from "../_components/project-switcher";
 import { MySprintActivityEditor } from "./_components/my-sprint-activity-editor";
+import { SprintRetrospectiveForm } from "./_components/sprint-retrospective-form";
 
 export const metadata: Metadata = {
   title: "My sprint activity · Project Tracker",
@@ -42,7 +44,7 @@ export default async function MySprintActivityPage({
       : ["draft", "active", "completed"];
   const { data: projects, error: projectsError } = await supabase
     .from("projects")
-    .select("id, name")
+    .select("id, name, status")
     .order("name");
   const selectedProject =
     projects?.find((project) => project.id === requestedProjectId) ?? projects?.[0];
@@ -52,7 +54,22 @@ export default async function MySprintActivityPage({
   }
 
   if (!selectedProject) {
-    return <div className="space-y-6"><header className="space-y-1"><h1 className="text-2xl font-semibold">My sprint activity</h1><p className="text-sm text-muted-foreground">Manage your own activity, availability, and allocation for active sprints.</p></header><Alert><AlertDescription>You are not currently assigned to a project.</AlertDescription></Alert></div>;
+    return (
+      <div className="space-y-6">
+        <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="max-w-2xl space-y-1">
+            <h1 className="text-2xl font-semibold">My sprint activity</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage your own activity, availability, and allocation for active sprints.
+            </p>
+          </div>
+          <ProjectSwitcher projects={projects ?? []} />
+        </header>
+        <Alert>
+          <AlertDescription>You are not currently assigned to a project.</AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   const { data: sprints, error: sprintsError } = await supabase
@@ -69,18 +86,25 @@ export default async function MySprintActivityPage({
     { data: timeOff, error: timeOffError },
     { data: activities, error: activitiesError },
     { data: activityNotes, error: activityNotesError },
+    { data: retroQuestions, error: retroQuestionsError },
+    { data: retroAnswers, error: retroAnswersError },
   ] = await Promise.all([
     sprintIds.length ? supabase.from("sprint_member_allocations").select("sprint_id, activity_id, hours").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
     sprintIds.length ? supabase.from("sprint_member_time_off").select("sprint_id, start_date, end_date").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("activity_types").select("id, name, is_active"),
     sprintIds.length ? supabase.from("sprint_member_activity_notes").select("sprint_id, activity, note").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
+    sprintIds.length ? supabase.from("sprint_retrospective_questions").select("id, sprint_id, question, description, order_index").in("sprint_id", sprintIds).order("order_index", { ascending: true }) : Promise.resolve({ data: [], error: null }),
+    sprintIds.length ? supabase.from("sprint_retrospective_answers").select("question_id, sprint_id, content").eq("user_id", user.id).in("sprint_id", sprintIds) : Promise.resolve({ data: [], error: null }),
   ]);
   const error =
     sprintsError ??
     allocationsError ??
     timeOffError ??
     activitiesError ??
-    activityNotesError;
+    activityNotesError ??
+    retroQuestionsError ??
+    retroAnswersError;
+
   if (error) {
     return (
       <Alert variant="destructive">
@@ -121,7 +145,22 @@ export default async function MySprintActivityPage({
       note,
     ]),
   );
+  const questionsBySprint = new Map<string, typeof retroQuestions>();
+  (retroQuestions ?? []).forEach((q) =>
+    questionsBySprint.set(q.sprint_id, [
+      ...(questionsBySprint.get(q.sprint_id) ?? []),
+      q,
+    ]),
+  );
+  const answersBySprint = new Map<string, typeof retroAnswers>();
+  (retroAnswers ?? []).forEach((a) =>
+    answersBySprint.set(a.sprint_id, [
+      ...(answersBySprint.get(a.sprint_id) ?? []),
+      a,
+    ]),
+  );
   const allSprints = sprints ?? [];
+
   const currentSprints = allSprints.filter(
     (sprint) => sprint.status !== "completed",
   );
@@ -255,20 +294,34 @@ export default async function MySprintActivityPage({
               ) : null}
             </>
           )}
+
+          <Separator />
+          <SprintRetrospectiveForm
+            key={sprint.id}
+            sprintId={sprint.id}
+            sprintStatus={sprint.status}
+            canEdit={user.role === "user" && (sprint.status === "active" || sprint.status === "completed")}
+            questions={questionsBySprint.get(sprint.id) ?? []}
+            initialAnswers={answersBySprint.get(sprint.id) ?? []}
+          />
         </CardContent>
       </Card>
     );
+
   };
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">My sprint activity</h1>
-        <p className="text-sm text-muted-foreground">
-          {user.role === "user"
-            ? "Manage your activity, availability, and allocation for active sprints, then review completed sprint history."
-            : "Your planned availability and activity allocation for projects you currently belong to."}
-        </p>
+      <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="max-w-2xl space-y-1">
+          <h1 className="text-2xl font-semibold">My sprint activity</h1>
+          <p className="text-sm text-muted-foreground">
+            {user.role === "user"
+              ? "Manage your activity, availability, and allocation for active sprints, then review completed sprint history."
+              : "Your planned availability and activity allocation for projects you currently belong to."}
+          </p>
+        </div>
+        <ProjectSwitcher projects={projects ?? []} />
       </header>
 
       {allSprints.length === 0 ? (
@@ -312,7 +365,7 @@ export default async function MySprintActivityPage({
                   Completed sprints
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Historical activity is read-only after a sprint is completed.
+                  Historical activity allocation is read-only. You can still review and update your retrospective reflections.
                 </p>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">

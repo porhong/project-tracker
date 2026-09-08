@@ -13,6 +13,7 @@ type OverviewTabsProps = {
   sprintTimeline: ReactNode;
   activity: ReactNode;
   releaseNotes: ReactNode;
+  retrospective: ReactNode;
   activityScope?: "own" | "team";
 };
 
@@ -20,6 +21,7 @@ export function OverviewTabs({
   sprintTimeline,
   activity,
   releaseNotes,
+  retrospective,
   activityScope = "team",
 }: OverviewTabsProps) {
   const { activeTab, setActiveTab } = useOverviewTab();
@@ -38,6 +40,7 @@ export function OverviewTabs({
           {activityScope === "own" ? "My work" : "Team & Work"}
         </TabsTrigger>
         <TabsTrigger value="release-notes">Release Notes</TabsTrigger>
+        <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
       </TabsList>
       <TabsContent value="timeline" keepMounted className="pt-4">
         {sprintTimeline}
@@ -48,7 +51,11 @@ export function OverviewTabs({
       <TabsContent value="release-notes" keepMounted className="pt-4">
         {releaseNotes}
       </TabsContent>
+      <TabsContent value="retrospective" keepMounted className="pt-4">
+        {retrospective}
+      </TabsContent>
     </Tabs>
   );
 }
+
 

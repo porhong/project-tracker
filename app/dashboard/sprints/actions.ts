@@ -418,3 +418,87 @@ export async function saveSprintMilestones(
   return { ok: true };
 }
 
+export type RetrospectiveQuestionInput = {
+  question: string;
+  description: string | null;
+  order_index: number;
+};
+
+function parseRetrospectiveQuestionsInput(
+  formData: FormData,
+): { data: RetrospectiveQuestionInput[] } | { error: string } {
+  try {
+    const raw: unknown = JSON.parse(String(formData.get("questions") ?? "[]"));
+    if (!Array.isArray(raw)) return { error: "Invalid retrospective questions payload." };
+
+    const questions: RetrospectiveQuestionInput[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const item = raw[i];
+      if (!isRecord(item)) return { error: `Invalid question at position ${i + 1}.` };
+
+      const question = String(item.question ?? "").trim();
+      const description = String(item.description ?? "").trim() || null;
+
+      if (!question) {
+        return { error: `Question #${i + 1} cannot be blank.` };
+      }
+      if (question.length > 300) {
+        return { error: `Question #${i + 1} cannot exceed 300 characters.` };
+      }
+      if (description && description.length > 1000) {
+        return { error: `Question #${i + 1} description cannot exceed 1000 characters.` };
+      }
+
+      questions.push({
+        question,
+        description,
+        order_index: i,
+      });
+    }
+
+    return { data: questions };
+  } catch {
+    return { error: "Invalid retrospective questions payload." };
+  }
+}
+
+export async function saveSprintRetrospectiveQuestions(
+  _prevState: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return fail("Missing sprint.");
+
+  const parsed = parseRetrospectiveQuestionsInput(formData);
+  if ("error" in parsed) return fail(parsed.error);
+
+  const editable = await loadEditableSprint(id);
+  if ("error" in editable) return fail(editable.error ?? "Sprint not found.");
+
+  const { error: deleteError } = await editable.supabase
+    .from("sprint_retrospective_questions")
+    .delete()
+    .eq("sprint_id", id);
+  if (deleteError) return fail(deleteError.message);
+
+  if (parsed.data.length > 0) {
+    const rows = parsed.data.map((q, index) => ({
+      sprint_id: id,
+      question: q.question,
+      description: q.description,
+      order_index: index,
+    }));
+
+    const { error: insertError } = await editable.supabase
+      .from("sprint_retrospective_questions")
+      .insert(rows);
+    if (insertError) return fail(insertError.message);
+  }
+
+  revalidate();
+  revalidatePath("/dashboard/my-sprint-activity");
+  return { ok: true };
+}
+
+
