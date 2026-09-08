@@ -57,3 +57,15 @@ export type SprintMilestoneRow = Pick<
   | "updated_at"
 >;
 
+export type SprintRetrospectiveQuestionRow = Pick<
+  Tables<"sprint_retrospective_questions">,
+  | "id"
+  | "sprint_id"
+  | "question"
+  | "description"
+  | "order_index"
+  | "created_at"
+  | "updated_at"
+>;
+
+

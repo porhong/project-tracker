@@ -10,6 +10,7 @@ import {
   FileTextIcon,
   FlagIcon,
   GaugeIcon,
+  MessageSquareTextIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlayIcon,
@@ -41,10 +42,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { calculateCapacityHours, SPRINT_STATUS_LABELS, WEEKDAYS, workingDaysLabel } from "@/lib/sprint-config";
 import { archiveSprint, createSprint, deleteSprint, reenableSprint, setSprintStatus, unarchiveSprint, updateSprint, type ActionResult } from "../actions";
-import type { ActivityTypeRow, ProjectOption, SprintMemberActivityNoteRow, SprintMemberAllocationRow, SprintMemberRow, SprintMemberTimeOffRow, SprintMilestoneRow, SprintRow } from "../types";
+import type { ActivityTypeRow, ProjectOption, SprintMemberActivityNoteRow, SprintMemberAllocationRow, SprintMemberRow, SprintMemberTimeOffRow, SprintMilestoneRow, SprintRetrospectiveQuestionRow, SprintRow } from "../types";
 import { ReleaseNotesDialog } from "./release-notes-dialog";
 import { SprintMemberCapacityDialog } from "./sprint-member-capacity-dialog";
 import { SprintMilestonesDialog } from "./sprint-milestones-dialog";
+import { SprintRetrospectiveQuestionsDialog } from "./sprint-retrospective-questions-dialog";
+
 
 type Defaults = { working_days: number[]; daily_work_hours: number };
 type FormProps = { mode: "create" | "edit"; sprint?: SprintRow; project: ProjectOption; defaults: Defaults; open: boolean; onOpenChange: (open: boolean) => void };
@@ -110,6 +113,7 @@ export function SprintManager({
   timeOff,
   activityNotes,
   milestones,
+  retrospectiveQuestions,
 }: {
   project: ProjectOption;
   sprints: SprintRow[];
@@ -120,12 +124,14 @@ export function SprintManager({
   timeOff: SprintMemberTimeOffRow[];
   activityNotes: SprintMemberActivityNoteRow[];
   milestones: SprintMilestoneRow[];
+  retrospectiveQuestions: SprintRetrospectiveQuestionRow[];
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<SprintRow | null>(null);
   const [editingReleaseNotes, setEditingReleaseNotes] = useState<SprintRow | null>(null);
   const [managingMilestones, setManagingMilestones] = useState<SprintRow | null>(null);
   const [managingCapacity, setManagingCapacity] = useState<SprintRow | null>(null);
+  const [managingRetroQuestions, setManagingRetroQuestions] = useState<SprintRow | null>(null);
   const [starting, setStarting] = useState<SprintRow | null>(null);
   const [completing, setCompleting] = useState<SprintRow | null>(null);
   const [reenabling, setReenabling] = useState<SprintRow | null>(null);
@@ -227,6 +233,10 @@ export function SprintManager({
                           <DropdownMenuItem onClick={() => setEditingReleaseNotes(sprint)}>
                             <FileTextIcon />
                             {sprint.status === "completed" || sprint.status === "archived" ? "View release notes" : "Edit release notes"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setManagingRetroQuestions(sprint)}>
+                            <MessageSquareTextIcon />
+                            {sprint.status === "completed" || sprint.status === "archived" ? "View retrospective questions" : "Configure retrospective questions"}
                           </DropdownMenuItem>
                           {sprint.status !== "completed" && sprint.status !== "archived" ? (
                             <DropdownMenuItem onClick={() => setManagingCapacity(sprint)}>
@@ -334,6 +344,7 @@ export function SprintManager({
       {editing ? <SprintFormDialog mode="edit" sprint={editing} project={project} defaults={defaults} open onOpenChange={(open) => { if (!open) setEditing(null); }} /> : null}
       {editingReleaseNotes ? <ReleaseNotesDialog sprint={editingReleaseNotes} open onOpenChange={(open) => { if (!open) setEditingReleaseNotes(null); }} /> : null}
       {managingMilestones ? <SprintMilestonesDialog sprint={managingMilestones} milestones={milestones.filter((m) => m.sprint_id === managingMilestones.id)} open onOpenChange={(open) => { if (!open) setManagingMilestones(null); }} /> : null}
+      {managingRetroQuestions ? <SprintRetrospectiveQuestionsDialog sprint={managingRetroQuestions} questions={retrospectiveQuestions.filter((q) => q.sprint_id === managingRetroQuestions.id)} open onOpenChange={(open) => { if (!open) setManagingRetroQuestions(null); }} /> : null}
       {managingCapacity ? <SprintMemberCapacityDialog sprint={managingCapacity} activities={activities} members={members} allocations={allocations.filter((allocation) => allocation.sprint_id === managingCapacity.id)} timeOff={timeOff.filter((record) => record.sprint_id === managingCapacity.id)} activityNotes={activityNotes.filter((note) => note.sprint_id === managingCapacity.id)} open onOpenChange={(open) => { if (!open) setManagingCapacity(null); }} /> : null}
 
       <Dialog open={Boolean(starting)} onOpenChange={(open) => { if (!open) setStarting(null); }}>

@@ -2,19 +2,26 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requireOverviewAccess } from "@/lib/auth/guards";
+import { createAvatarUrls, getProjectMemberAvatarMap } from "@/lib/profile/avatar-url";
 import { createClient } from "@/lib/supabase/server";
 import { ClientOverviewHeaderControls } from "./_components/client-overview-header-controls";
 import { MemberActivityExplorer } from "./_components/member-activity-explorer";
+import { OverviewTabProvider } from "./_components/overview-tab-context";
 import { OverviewTabs } from "./_components/overview-tabs";
 import { ReleaseNotesFeed } from "./_components/release-notes-feed";
+import { SprintRetrospectiveViewer } from "./_components/sprint-retrospective-viewer";
 import { SprintTimeline } from "./_components/sprint-timeline";
 import type {
   ClientReleaseSprint,
+  ClientRetrospectiveUserGroup,
   ClientSprint,
   ClientSprintMilestone,
   ClientSprintProgress,
+  ClientSprintRetrospectiveQuestion,
+  ClientSprintRetrospectiveResponse,
   PlannedAllocation,
 } from "./types";
+
 
 export const metadata: Metadata = {
   title: "Overview · Project Tracker",
@@ -24,6 +31,7 @@ type ClientOverviewPageProps = {
   searchParams: Promise<{
     project?: string | string[];
     sprint?: string | string[];
+    tab?: string | string[];
   }>;
 };
 
@@ -69,6 +77,8 @@ export async function ClientOverview({
     typeof params.project === "string" ? params.project : undefined;
   const requestedSprintId =
     typeof params.sprint === "string" ? params.sprint : undefined;
+  const requestedTab =
+    typeof params.tab === "string" ? params.tab : "timeline";
   const supabase = await createClient();
 
   const { data: projects, error: projectsError } = await supabase
@@ -109,7 +119,7 @@ export async function ClientOverview({
     );
   }
 
-  const [releaseResult, progressResult] = await Promise.all([
+  const [releaseResult, progressResult, memberAvatarMap] = await Promise.all([
     supabase
       .from("sprints")
       .select(
@@ -121,6 +131,7 @@ export async function ClientOverview({
     supabase.rpc("get_client_project_sprint_progress", {
       p_project_id: selectedProject.id,
     }),
+    getProjectMemberAvatarMap(selectedProject.id),
   ]);
 
   const sprintIds = (releaseResult.data ?? []).map((sprint) => sprint.id);
@@ -144,7 +155,11 @@ export async function ClientOverview({
   }
 
   const allMilestones = (milestonesResult ?? []) as ClientSprintMilestone[];
-  const progressRows = (progressResult.data ?? []) as ClientSprintProgress[];
+  const rawProgressRows = (progressResult.data ?? []) as ClientSprintProgress[];
+  const progressRows: ClientSprintProgress[] = rawProgressRows.map((row) => ({
+    ...row,
+    avatar_url: row.member_name ? (memberAvatarMap.get(row.member_name) ?? null) : null,
+  }));
   const releaseSprints: ClientReleaseSprint[] = (releaseResult.data ?? [])
     .filter((sprint) => hasReleaseNoteContent(sprint.release_notes))
     .map((sprint) => ({
@@ -208,69 +223,159 @@ export async function ClientOverview({
     0,
   );
 
-  return (
-    <div className="space-y-8">
-      <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div className="max-w-2xl space-y-2">
-          <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
-          <p className="text-sm text-muted-foreground">
-            {selectedProject.description || overviewFallbackDescription}
-          </p>
-        </div>
-        <ClientOverviewHeaderControls
-          projects={projects ?? []}
-          visibleSprints={visibleSprints}
-          selectedSprintId={selectedSprint?.id ?? null}
-          selectedProject={selectedProject}
-          selectedSprint={selectedSprint ?? null}
-          selectedSprintRows={selectedSprintRows}
-          selectedSprintMilestones={selectedSprintMilestones}
-          totalPlannedHours={plannedHours}
-          activityScope={activityScope}
-          userRole={user.role}
-        />
-      </header>
+  const [{ data: retroQuestions, error: retroQuestionsError }, { data: rawRetroResponses, error: retroResponsesError }] =
+    selectedSprint
+      ? await Promise.all([
+          supabase
+            .from("sprint_retrospective_questions")
+            .select("id, sprint_id, question, description, order_index")
+            .eq("sprint_id", selectedSprint.id)
+            .order("order_index", { ascending: true }),
+          supabase.rpc("get_sprint_retrospective_responses", {
+            p_sprint_id: selectedSprint.id,
+          }),
+        ])
+      : [{ data: [], error: null }, { data: [], error: null }];
 
-      <OverviewTabs
-        activityScope={activityScope}
-        sprintTimeline={
-          !selectedSprint ? (
-            <Alert>
-              <AlertDescription>
-                No active or completed sprint is available for this project yet.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <SprintTimeline
-              sprint={selectedSprint}
-              progressRows={selectedSprintRows}
-              totalPlannedHours={plannedHours}
-              milestones={selectedSprintMilestones}
-              activityScope={activityScope}
-            />
-          )
-        }
-        activity={
-          !selectedSprint ? (
-            <Alert>
-              <AlertDescription>
-                No active or completed sprint is available for this project yet.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <MemberActivityExplorer
-              sprint={selectedSprint}
-              progressRows={selectedSprintRows}
-              totalPlannedHours={plannedHours}
-              activityScope={activityScope}
-            />
-          )
-        }
-        releaseNotes={<ReleaseNotesFeed releases={releaseSprints} />}
-      />
-    </div>
+  const retroError = retroQuestionsError ?? retroResponsesError;
+  if (retroError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          Could not load sprint retrospective: {retroError.message}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const retroResponses = (rawRetroResponses ?? []) as ClientSprintRetrospectiveResponse[];
+  const retroAvatarPaths = retroResponses
+    .map((r) => r.avatar_path)
+    .filter((p): p is string => Boolean(p));
+  const retroAvatarUrlMap = await createAvatarUrls(retroAvatarPaths);
+
+  const myRetroAnswers = retroResponses
+    .filter((r) => r.user_id === user.id)
+    .map((r) => ({
+      question_id: r.question_id,
+      content: r.content,
+    }));
+
+  const userGroupsMap = new Map<string, ClientRetrospectiveUserGroup>();
+  for (const resp of retroResponses) {
+    if (!userGroupsMap.has(resp.user_id)) {
+      userGroupsMap.set(resp.user_id, {
+        userId: resp.user_id,
+        memberName: resp.member_name || "Team member",
+        competency: resp.competency || "",
+        avatarUrl: resp.avatar_path ? (retroAvatarUrlMap.get(resp.avatar_path) ?? null) : null,
+        updatedAt: resp.updated_at,
+        answers: [],
+      });
+    }
+    const group = userGroupsMap.get(resp.user_id)!;
+    const question = (retroQuestions ?? []).find((q) => q.id === resp.question_id);
+    group.answers.push({
+      questionId: resp.question_id,
+      question: question?.question ?? "Question",
+      questionDescription: question?.description ?? null,
+      content: resp.content,
+    });
+    if (resp.updated_at > group.updatedAt) {
+      group.updatedAt = resp.updated_at;
+    }
+  }
+  const retrospectiveUserGroups = [...userGroupsMap.values()];
+
+  return (
+    <OverviewTabProvider initialTab={requestedTab}>
+      <div className="space-y-8">
+        <header className="grid gap-4 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="max-w-2xl space-y-2">
+            <h1 className="text-2xl font-semibold">{overviewTitle}</h1>
+            <p className="text-sm text-muted-foreground">
+              {selectedProject.description || overviewFallbackDescription}
+            </p>
+          </div>
+          <ClientOverviewHeaderControls
+            projects={projects ?? []}
+            visibleSprints={visibleSprints}
+            selectedSprintId={selectedSprint?.id ?? null}
+            selectedProject={selectedProject}
+            selectedSprint={selectedSprint ?? null}
+            selectedSprintRows={selectedSprintRows}
+            selectedSprintMilestones={selectedSprintMilestones}
+            totalPlannedHours={plannedHours}
+            activityScope={activityScope}
+            userRole={user.role}
+          />
+        </header>
+
+        <OverviewTabs
+          activityScope={activityScope}
+          sprintTimeline={
+            !selectedSprint ? (
+              <Alert>
+                <AlertDescription>
+                  No active or completed sprint is available for this project yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <SprintTimeline
+                sprint={selectedSprint}
+                progressRows={selectedSprintRows}
+                totalPlannedHours={plannedHours}
+                milestones={selectedSprintMilestones}
+                activityScope={activityScope}
+              />
+            )
+          }
+          activity={
+            !selectedSprint ? (
+              <Alert>
+                <AlertDescription>
+                  No active or completed sprint is available for this project yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <MemberActivityExplorer
+                sprint={selectedSprint}
+                progressRows={selectedSprintRows}
+                totalPlannedHours={plannedHours}
+                activityScope={activityScope}
+              />
+            )
+          }
+          releaseNotes={<ReleaseNotesFeed releases={releaseSprints} />}
+          retrospective={
+            !selectedSprint ? (
+              <Alert>
+                <AlertDescription>
+                  No active or completed sprint is available for this project yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <SprintRetrospectiveViewer
+                sprint={selectedSprint}
+                questions={(retroQuestions ?? []) as ClientSprintRetrospectiveQuestion[]}
+                userGroups={retrospectiveUserGroups}
+                activityScope={activityScope}
+                canSubmit={
+                  user.role !== "viewer" &&
+                  (selectedSprint.status === "active" ||
+                    selectedSprint.status === "completed")
+                }
+                currentUserId={user.id}
+                myAnswers={myRetroAnswers}
+              />
+            )
+          }
+        />
+      </div>
+    </OverviewTabProvider>
   );
 }
+
 
 /** Retain the original route for old links while viewer overview lives at /dashboard. */
 export default function ClientOverviewPage() {

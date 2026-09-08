@@ -14,7 +14,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -139,6 +139,7 @@ export function MemberActivityExplorer({
         id: `${row.sprint_id}-${row.member_name || "member"}`,
         name: row.member_name || "Project member",
         competency: row.competency || "Team member",
+        avatarUrl: row.avatar_url ?? null,
         allocations: memberAllocations,
         notes: memberNotes,
         latestNote,
@@ -438,6 +439,9 @@ export function MemberActivityExplorer({
                         size="lg"
                         className={cn("bg-background ring-2", colorVariant.ringColor)}
                       >
+                        {member.avatarUrl ? (
+                          <AvatarImage src={member.avatarUrl} alt={member.name} />
+                        ) : null}
                         <AvatarFallback
                           className={cn(
                             "font-semibold text-xs tracking-normal select-none",
@@ -566,6 +570,9 @@ export function MemberActivityExplorer({
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar size="default" className={cn("bg-background ring-1", colorVariant.ringColor)}>
+                          {member.avatarUrl ? (
+                            <AvatarImage src={member.avatarUrl} alt={member.name} />
+                          ) : null}
                           <AvatarFallback
                             className={cn(
                               "font-semibold text-[11px] select-none",

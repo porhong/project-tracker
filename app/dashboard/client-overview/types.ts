@@ -49,6 +49,7 @@ export type ClientSprintProgress = {
   sprint_status: string;
   member_name: string;
   competency: string;
+  avatar_url?: string | null;
   planned_allocations: Json;
   activity_notes: Json;
 };
@@ -63,4 +64,40 @@ export type ClientSprintMilestone = {
   icon: "compass" | "sparkles" | "code" | "shield" | "rocket" | "flag" | "check" | "users";
   order_index: number;
 };
+
+export type ClientSprintRetrospectiveQuestion = {
+  id: string;
+  sprint_id: string;
+  question: string;
+  description: string | null;
+  order_index: number;
+};
+
+export type ClientSprintRetrospectiveResponse = {
+  answer_id: string;
+  sprint_id: string;
+  question_id: string;
+  user_id: string;
+  member_name: string;
+  competency: string;
+  avatar_path: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClientRetrospectiveUserGroup = {
+  userId: string;
+  memberName: string;
+  competency: string;
+  avatarUrl: string | null;
+  updatedAt: string;
+  answers: {
+    questionId: string;
+    question: string;
+    questionDescription: string | null;
+    content: string;
+  }[];
+};
+
 

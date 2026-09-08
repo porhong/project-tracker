@@ -19,6 +19,7 @@ import {
   AvatarFallback,
   AvatarGroup,
   AvatarGroupCount,
+  AvatarImage,
 } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -118,6 +119,7 @@ export function SprintTimeline({
         name,
         competency: row.competency || "Team member",
         totalSprintHours,
+        avatarUrl: row.avatar_url ?? null,
         allocations: rowAllocations,
         notes,
         latestNote,
@@ -302,6 +304,9 @@ export function SprintTimeline({
                         tooltipText={`${name} (${profile.competency}) · ${hours(profile.totalSprintHours)}h`}
                       >
                         <Avatar size="sm" className="border-2 border-background bg-background ring-1 ring-border/50">
+                          {profile.avatarUrl ? (
+                            <AvatarImage src={profile.avatarUrl} alt={name} />
+                          ) : null}
                           <AvatarFallback
                             className={cn(
                               "text-[9px] font-semibold select-none",

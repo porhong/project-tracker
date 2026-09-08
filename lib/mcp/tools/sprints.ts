@@ -484,4 +484,87 @@ export function registerSprintTools(server: McpServer, ctx: ToolContext) {
       return ok({ sprint_id, milestones: milestones.length });
     },
   );
+
+  server.registerTool(
+    "get_sprint_retrospective_questions",
+    {
+      title: "Get sprint retrospective questions",
+      description: "Get a sprint's retrospective questions in order. Admin only.",
+      inputSchema: {
+        sprint_id: z.string().uuid(),
+      },
+    },
+    async ({ sprint_id }) => {
+      const { data, error } = await client
+        .from("sprint_retrospective_questions")
+        .select(
+          "id, sprint_id, question, description, order_index, created_at, updated_at",
+        )
+        .eq("sprint_id", sprint_id)
+        .order("order_index");
+      if (error) return fail(error.message);
+      return ok(data ?? []);
+    },
+  );
+
+  server.registerTool(
+    "set_sprint_retrospective_questions",
+    {
+      title: "Set sprint retrospective questions",
+      description:
+        "Replace a sprint's retrospective questions. Pass an empty array to clear them. The sprint must be draft or active. Admin only.",
+      inputSchema: {
+        sprint_id: z.string().uuid(),
+        questions: z.array(
+          z.object({
+            question: z
+              .string()
+              .trim()
+              .min(1)
+              .max(300),
+            description: z
+              .string()
+              .trim()
+              .max(1000)
+              .optional(),
+          }),
+        ),
+      },
+    },
+    async ({ sprint_id, questions }) => {
+      const { data: sprint, error: readError } = await client
+        .from("sprints")
+        .select("status")
+        .eq("id", sprint_id)
+        .single();
+      if (readError || !sprint) return fail("Sprint not found.");
+      if (sprint.status === "completed" || sprint.status === "archived") {
+        return fail(
+          "Completed or archived sprint retrospective questions are read-only.",
+        );
+      }
+
+      const { error: deleteError } = await client
+        .from("sprint_retrospective_questions")
+        .delete()
+        .eq("sprint_id", sprint_id);
+      if (deleteError) return fail(deleteError.message);
+
+      if (questions.length > 0) {
+        const rows = questions.map((q, index) => ({
+          sprint_id,
+          question: q.question,
+          description: q.description || null,
+          order_index: index,
+        }));
+        const { error: insertError } = await client
+          .from("sprint_retrospective_questions")
+          .insert(rows);
+        if (insertError) return fail(insertError.message);
+      }
+
+      return ok({ sprint_id, questions: questions.length });
+    },
+  );
 }
+

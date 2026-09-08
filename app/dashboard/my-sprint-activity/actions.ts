@@ -193,3 +193,72 @@ export async function saveMyActiveSprintPlan(
   revalidatePath("/dashboard/my-sprint-activity");
   return { ok: true };
 }
+
+export type RetrospectiveAnswerInput = {
+  question_id: string;
+  content: string;
+};
+
+function parseRetrospectiveAnswers(formData: FormData):
+  | { data: RetrospectiveAnswerInput[] }
+  | { error: string } {
+  try {
+    const raw: unknown = JSON.parse(String(formData.get("answers") ?? "[]"));
+    if (!Array.isArray(raw)) return { error: "Invalid retrospective answers payload." };
+
+    const answers: RetrospectiveAnswerInput[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const item = raw[i];
+      if (!isRecord(item)) return { error: `Invalid answer at position ${i + 1}.` };
+
+      const questionId = String(item.question_id ?? "");
+      const content = String(item.content ?? "").trim();
+
+      if (!UUID_PATTERN.test(questionId)) {
+        return { error: "Invalid question ID in answers." };
+      }
+      if (content.length > 3000) {
+        return { error: "Each retrospective answer cannot exceed 3,000 characters." };
+      }
+
+      answers.push({
+        question_id: questionId,
+        content,
+      });
+    }
+
+    return { data: answers };
+  } catch {
+    return { error: "Invalid retrospective answers payload." };
+  }
+}
+
+export async function saveMySprintRetrospective(
+  _prevState: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireProfile();
+  if (user.role === "viewer") {
+    return fail("Viewers cannot submit sprint retrospectives.");
+  }
+
+  const sprintId = String(formData.get("sprint_id") ?? "");
+  if (!UUID_PATTERN.test(sprintId)) return fail("Invalid sprint.");
+
+  const parsed = parseRetrospectiveAnswers(formData);
+  if ("error" in parsed) return fail(parsed.error);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("replace_my_sprint_retrospective", {
+    p_sprint_id: sprintId,
+    p_answers: parsed.data,
+  });
+
+  if (error) return fail(error.message);
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/client-overview");
+  revalidatePath("/dashboard/my-sprint-activity");
+  return { ok: true };
+}
+
